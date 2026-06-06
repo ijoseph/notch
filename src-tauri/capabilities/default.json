@@ -28,6 +28,15 @@
       ]
     },
     {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "$DOCUMENT/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$DESKTOP/**" }
+      ]
+    },
+    {
       "identifier": "fs:scope",
       "allow": [
         { "path": "$APPCONFIG" },

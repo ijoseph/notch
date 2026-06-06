@@ -1,6 +1,7 @@
-import { readDir, readTextFile } from '@tauri-apps/plugin-fs';
+import { readDir, readTextFile, readFile } from '@tauri-apps/plugin-fs';
 import type { CellType, DiagramType } from '../types';
 import * as db from './database';
+import { saveImageBytes, extForName } from './images';
 
 // Quiver data format types
 interface QuiverNotebookMeta {
@@ -107,6 +108,48 @@ function sanitizeJsonString(str: string): string {
   return str.replace(/\\x([0-9a-fA-F]{2})/g, (_, hex) => {
     return '\\u00' + hex;
   });
+}
+
+/**
+ * Read a Quiver note's `resources/` directory, copy each image into the app's
+ * images store, and return a map from the original Quiver resource filename
+ * (e.g. "F948...037.jpg") to the new relative path (e.g. "images/<uuid>.jpg").
+ */
+async function importNoteResources(notePath: string): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const resourcesPath = `${notePath}/resources`;
+    const resources = await readDir(resourcesPath);
+    for (const resource of resources) {
+      if (!resource.isFile) continue;
+      try {
+        const bytes = await readFile(`${resourcesPath}/${resource.name}`);
+        const newPath = await saveImageBytes(bytes, extForName(resource.name));
+        map.set(resource.name, newPath);
+      } catch {
+        // Skip individual resources we can't read/save
+      }
+    }
+  } catch {
+    // resources directory may not exist
+  }
+  return map;
+}
+
+/**
+ * Rewrite Quiver image references (`quiver-image-url/<filename>`, with optional
+ * leading colon/slashes) to the imported local image paths. Unresolved
+ * references are left untouched so they degrade gracefully.
+ */
+function rewriteImageUrls(data: string, resourceMap: Map<string, string>): string {
+  if (resourceMap.size === 0) return data;
+  return data.replace(
+    /quiver-image-url:?\/*([A-Za-z0-9._%-]+)/gi,
+    (match, filename: string) => {
+      const newPath = resourceMap.get(filename) ?? resourceMap.get(decodeURIComponent(filename));
+      return newPath ?? match;
+    }
+  );
 }
 
 // Map Quiver cell types to our types
@@ -477,6 +520,9 @@ async function importQuiverNote(notePath: string, notebookId: string): Promise<v
     await db.deleteCell(note.id, cell.id);
   }
 
+  // Import embedded image resources first so cell data can reference them
+  const resourceMap = await importNoteResources(notePath);
+
   // Create cells from Quiver content
   for (let i = 0; i < content.cells.length; i++) {
     const quiverCell = content.cells[i];
@@ -484,9 +530,9 @@ async function importQuiverNote(notePath: string, notebookId: string): Promise<v
 
     const cell = await db.createCell(note.id, cellType);
 
-    // Update cell with data
+    // Update cell with data, rewriting Quiver image URLs to local image paths
     await db.updateCell(note.id, cell.id, {
-      data: quiverCell.data,
+      data: rewriteImageUrls(quiverCell.data, resourceMap),
       language: quiverCell.language,
       diagramType: mapDiagramType(quiverCell.diagramType),
     });
@@ -510,20 +556,6 @@ async function importQuiverNote(notePath: string, notebookId: string): Promise<v
     createdAt: meta.created_at * 1000, // Quiver uses seconds
     updatedAt: meta.updated_at * 1000,
   });
-
-  // Import resources if they exist
-  try {
-    const resourcesPath = `${notePath}/resources`;
-    const resources = await readDir(resourcesPath);
-    for (const resource of resources) {
-      if (resource.isFile) {
-        // Resource import would go here
-        // For now, we skip binary resources
-      }
-    }
-  } catch {
-    // Resources directory may not exist
-  }
 }
 
 /**

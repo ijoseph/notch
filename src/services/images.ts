@@ -39,16 +39,21 @@ const MIME_EXT: Record<string, string> = {
   'image/heic': 'heic',
 };
 
+// Extract a lowercase file extension from a filename, falling back to "png".
+export function extForName(name: string): string {
+  const dot = name.lastIndexOf('.');
+  if (dot >= 0 && dot < name.length - 1) {
+    return name.slice(dot + 1).toLowerCase();
+  }
+  return 'png';
+}
+
 // Pick a sensible file extension from the dropped/pasted file's MIME type,
 // falling back to the original filename's extension, then to "png".
 export function extForFile(file: File): string {
   const fromMime = MIME_EXT[file.type.toLowerCase()];
   if (fromMime) return fromMime;
-  const dot = file.name.lastIndexOf('.');
-  if (dot >= 0 && dot < file.name.length - 1) {
-    return file.name.slice(dot + 1).toLowerCase();
-  }
-  return 'png';
+  return extForName(file.name);
 }
 
 // Persist raw image bytes to the images directory and return the relative path

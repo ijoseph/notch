@@ -187,7 +187,7 @@ export default function NoteList() {
               key={note.id}
               note={note}
               isSelected={selectedNoteId === note.id}
-              onClick={() => selectNote(note.id)}
+              onSelect={selectNote}
             />
           ))
         )}

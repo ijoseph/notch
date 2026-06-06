@@ -108,35 +108,46 @@ export default function NoteEditor({ showFindBar, onCloseFindBar }: NoteEditorPr
     setShowCellTypeMenu(false);
   };
 
-  const handleDeleteCell = useCallback(async (cellId: string) => {
-    if (!note || note.cells.length <= 1) return; // Don't delete the last cell
+  // These read the current note from the store (rather than closing over `note`)
+  // so their identity stays stable across the debounced edit flushes — which
+  // lets CellContainer stay memoized.
+  const currentNote = () => {
+    const s = useStore.getState();
+    return s.notes.find(n => n.id === s.selectedNoteId) ?? null;
+  };
 
-    const cellIndex = note.cells.findIndex(c => c.id === cellId);
-    await deleteCell(note.id, cellId);
+  const handleDeleteCell = useCallback(async (cellId: string) => {
+    const n = currentNote();
+    if (!n || n.cells.length <= 1) return; // Don't delete the last cell
+
+    const cellIndex = n.cells.findIndex(c => c.id === cellId);
+    await deleteCell(n.id, cellId);
 
     // Focus previous cell, or next if deleting first cell
     const newFocusIndex = cellIndex > 0 ? cellIndex - 1 : 0;
-    const remainingCells = note.cells.filter(c => c.id !== cellId);
+    const remainingCells = n.cells.filter(c => c.id !== cellId);
     if (remainingCells[newFocusIndex]) {
       setFocusedCellId(remainingCells[newFocusIndex].id);
     }
-  }, [note, deleteCell]);
+  }, [deleteCell]);
 
   const handleNavigatePrev = useCallback((cellId: string) => {
-    if (!note) return;
-    const cellIndex = note.cells.findIndex(c => c.id === cellId);
+    const n = currentNote();
+    if (!n) return;
+    const cellIndex = n.cells.findIndex(c => c.id === cellId);
     if (cellIndex > 0) {
-      setFocusedCellId(note.cells[cellIndex - 1].id);
+      setFocusedCellId(n.cells[cellIndex - 1].id);
     }
-  }, [note]);
+  }, []);
 
   const handleNavigateNext = useCallback((cellId: string) => {
-    if (!note) return;
-    const cellIndex = note.cells.findIndex(c => c.id === cellId);
-    if (cellIndex < note.cells.length - 1) {
-      setFocusedCellId(note.cells[cellIndex + 1].id);
+    const n = currentNote();
+    if (!n) return;
+    const cellIndex = n.cells.findIndex(c => c.id === cellId);
+    if (cellIndex < n.cells.length - 1) {
+      setFocusedCellId(n.cells[cellIndex + 1].id);
     }
-  }, [note]);
+  }, []);
 
   // Handle Shift+Enter to add new cell
   const handleKeyDown = useCallback(async (e: React.KeyboardEvent) => {
@@ -184,11 +195,11 @@ export default function NoteEditor({ showFindBar, onCloseFindBar }: NoteEditorPr
             noteId={note.id}
             cell={cell}
             isFocused={focusedCellId === cell.id}
-            onFocus={() => setFocusedCellId(cell.id)}
-            onDelete={() => handleDeleteCell(cell.id)}
+            onFocus={setFocusedCellId}
+            onDelete={handleDeleteCell}
             canDelete={note.cells.length > 1}
-            onNavigatePrev={() => handleNavigatePrev(cell.id)}
-            onNavigateNext={() => handleNavigateNext(cell.id)}
+            onNavigatePrev={handleNavigatePrev}
+            onNavigateNext={handleNavigateNext}
           />
         ))}
       </div>

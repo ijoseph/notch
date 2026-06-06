@@ -1,7 +1,37 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore, useNotebooks, useTags } from '../../store';
-import type { Notebook, SpecialCollection } from '../../types';
+import type { Note, Notebook, SpecialCollection } from '../../types';
 import { getNotebookSubtreeIds, isDescendantOf } from '../../utils/notebooks';
+
+function computeCounts(notes: Note[], notebooks: Notebook[]): NoteCounts {
+  const inbox = notebooks.find(nb => nb.name === 'Inbox');
+  return {
+    inbox: notes.filter(n => inbox && n.notebookId === inbox.id && !n.isTrashed).length,
+    favorites: notes.filter(n => n.isFavorite && !n.isTrashed).length,
+    recents: Math.min(notes.filter(n => !n.isTrashed).length, 50),
+    trash: notes.filter(n => n.isTrashed).length,
+    all: notes.filter(n => !n.isTrashed).length,
+    notebooks: notebooks.reduce((acc, nb) => {
+      const notebookIds = getNotebookSubtreeIds(notebooks, nb.id);
+      acc[nb.id] = notes.filter(n => notebookIds.has(n.notebookId) && !n.isTrashed).length;
+      return acc;
+    }, {} as Record<string, number>),
+  };
+}
+
+// Shallow-compare two count objects so the sidebar only re-renders when a count
+// actually changes (not on every cell-text edit).
+function countsEqual(a: NoteCounts, b: NoteCounts): boolean {
+  if (a.inbox !== b.inbox || a.favorites !== b.favorites || a.recents !== b.recents ||
+      a.trash !== b.trash || a.all !== b.all) return false;
+  const ak = Object.keys(a.notebooks);
+  const bk = Object.keys(b.notebooks);
+  if (ak.length !== bk.length) return false;
+  for (const k of ak) {
+    if (a.notebooks[k] !== b.notebooks[k]) return false;
+  }
+  return true;
+}
 
 interface NoteCounts {
   inbox: number;
@@ -239,7 +269,6 @@ export default function Sidebar() {
 
   const notebooks = useNotebooks();
   const tags = useTags();
-  const notes = useStore(state => state.notes);
   const selectedCollection = useStore(state => state.selectedCollection);
   const selectedNotebookId = useStore(state => state.selectedNotebookId);
   const selectedTagId = useStore(state => state.selectedTagId);
@@ -252,22 +281,13 @@ export default function Sidebar() {
   const createNote = useStore(state => state.createNote);
   const updateNotebook = useStore(state => state.updateNotebook);
 
-  // Calculate note counts
-  const counts: NoteCounts = {
-    inbox: notes.filter(n => {
-      const inboxNotebook = notebooks.find(nb => nb.name === 'Inbox');
-      return inboxNotebook && n.notebookId === inboxNotebook.id && !n.isTrashed;
-    }).length,
-    favorites: notes.filter(n => n.isFavorite && !n.isTrashed).length,
-    recents: Math.min(notes.filter(n => !n.isTrashed).length, 50),
-    trash: notes.filter(n => n.isTrashed).length,
-    all: notes.filter(n => !n.isTrashed).length,
-    notebooks: notebooks.reduce((acc, nb) => {
-      const notebookIds = getNotebookSubtreeIds(notebooks, nb.id);
-      acc[nb.id] = notes.filter(n => notebookIds.has(n.notebookId) && !n.isTrashed).length;
-      return acc;
-    }, {} as Record<string, number>),
-  };
+  // Counts depend only on note membership/flags, never on cell text. Derive them
+  // with an equality check so editing a cell (which changes the notes array but
+  // not any count) doesn't re-render the whole sidebar tree on every keystroke.
+  const counts = useStore(
+    useCallback((state) => computeCounts(state.notes, state.notebooks), []),
+    countsEqual
+  );
 
   // Filter tags
   const filteredTags = tags.filter(tag =>

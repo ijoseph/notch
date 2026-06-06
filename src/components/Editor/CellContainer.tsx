@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useStore } from '../../store';
 import type { Cell } from '../../types';
 import TextCell from './cells/TextCell';
@@ -10,20 +11,21 @@ interface CellContainerProps {
   noteId: string;
   cell: Cell;
   isFocused: boolean;
-  onFocus: () => void;
-  onDelete: () => void;
   canDelete: boolean;
-  onNavigatePrev: () => void;
-  onNavigateNext: () => void;
+  // Stable, id-keyed handlers so this component can be memoized.
+  onFocus: (id: string) => void;
+  onDelete: (id: string) => void;
+  onNavigatePrev: (id: string) => void;
+  onNavigateNext: (id: string) => void;
 }
 
-export default function CellContainer({
+function CellContainer({
   noteId,
   cell,
   isFocused,
+  canDelete,
   onFocus,
   onDelete,
-  canDelete,
   onNavigatePrev,
   onNavigateNext,
 }: CellContainerProps) {
@@ -41,9 +43,11 @@ export default function CellContainer({
     updateCell(noteId, cell.id, { diagramType });
   };
 
+  const handleFocus = () => onFocus(cell.id);
+
   const handleBackspaceEmpty = () => {
     if (canDelete && !cell.data.trim()) {
-      onDelete();
+      onDelete(cell.id);
     }
   };
 
@@ -51,11 +55,11 @@ export default function CellContainer({
     const commonProps = {
       data: cell.data,
       onChange: handleDataChange,
-      onFocus,
+      onFocus: handleFocus,
       isFocused,
       onBackspaceEmpty: handleBackspaceEmpty,
-      onNavigatePrev,
-      onNavigateNext,
+      onNavigatePrev: () => onNavigatePrev(cell.id),
+      onNavigateNext: () => onNavigateNext(cell.id),
     };
 
     switch (cell.type) {
@@ -89,9 +93,13 @@ export default function CellContainer({
   return (
     <div
       className={`cell cell-${cell.type} ${isFocused ? 'focused' : ''}`}
-      onClick={onFocus}
+      onClick={handleFocus}
     >
       <div className="cell-content">{renderCell()}</div>
     </div>
   );
 }
+
+// Memoized so a store update (e.g. the debounced flush of the cell being edited)
+// re-renders only the changed cell, not every cell in the note.
+export default memo(CellContainer);

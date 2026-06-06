@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import type { Note } from '../../types';
 
 interface NoteListItemProps {
   note: Note;
   isSelected: boolean;
-  onClick: () => void;
+  onSelect: (id: string) => void;
 }
 
 function formatDate(timestamp: number): string {
@@ -36,7 +36,7 @@ export function copyNoteLink(noteId: string, noteTitle?: string) {
   ]);
 }
 
-export default function NoteListItem({ note, isSelected, onClick }: NoteListItemProps) {
+function NoteListItem({ note, isSelected, onSelect }: NoteListItemProps) {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
 
@@ -56,7 +56,7 @@ export default function NoteListItem({ note, isSelected, onClick }: NoteListItem
     <>
       <div
         className={`note-item ${isSelected ? 'selected' : ''}`}
-        onClick={onClick}
+        onClick={() => onSelect(note.id)}
         onContextMenu={handleContextMenu}
       >
         <div className="note-title">
@@ -88,3 +88,7 @@ export default function NoteListItem({ note, isSelected, onClick }: NoteListItem
     </>
   );
 }
+
+// Memoized so editing a note re-renders only that note's row, not the whole
+// list. Note objects keep identity across edits except the one being changed.
+export default memo(NoteListItem);

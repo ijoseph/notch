@@ -27,8 +27,21 @@
         { "path": "$DESKTOP/**" }
       ]
     },
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$APPCONFIG" },
+        { "path": "$APPCONFIG/**" },
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**" },
+        { "path": "$APPLOCALDATA" },
+        { "path": "$APPLOCALDATA/**" }
+      ]
+    },
     "fs:default",
     "fs:allow-write-text-file",
+    "fs:allow-write-file",
+    "fs:allow-exists",
     "fs:allow-mkdir",
     "sql:default",
     "sql:allow-load",

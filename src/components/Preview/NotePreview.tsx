@@ -6,6 +6,9 @@ import mermaid from 'mermaid';
 import DOMPurify from 'dompurify';
 import type { Config } from 'dompurify';
 import type { Note } from '../../types';
+// Side-effect import: registers the shared image extension (handles `=800x`
+// sizing and resolves local image paths) on the marked singleton.
+import '../../utils/markdown';
 
 // Configure DOMPurify for text cells
 const sanitizeConfig: Config = {

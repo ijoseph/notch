@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useStore, useSelectedNote, useEditorViewMode, useNotebooks } from '../../store';
+import { useStore, useSelectedNote, useEditorViewMode, useEditorKeymap, useNotebooks } from '../../store';
 import CellContainer from './CellContainer';
 import NotePreview from '../Preview/NotePreview';
 import FindBar from '../Search/FindBar';
 import { copyNoteLink } from '../NoteList/NoteListItem';
-import type { CellType, EditorViewMode } from '../../types';
+import type { CellType, EditorViewMode, EditorKeymapMode } from '../../types';
 
 const cellTypes: { type: CellType; label: string }[] = [
   { type: 'text', label: 'Text Cell' },
@@ -23,6 +23,8 @@ export default function NoteEditor({ showFindBar, onCloseFindBar }: NoteEditorPr
   const note = useSelectedNote();
   const notebooks = useNotebooks();
   const editorViewMode = useEditorViewMode();
+  const editorKeymap = useEditorKeymap();
+  const setEditorKeymap = useStore(state => state.setEditorKeymap);
   const updateNote = useStore(state => state.updateNote);
   const toggleFavorite = useStore(state => state.toggleFavorite);
   const addCell = useStore(state => state.addCell);
@@ -414,6 +416,16 @@ export default function NoteEditor({ showFindBar, onCloseFindBar }: NoteEditorPr
             <circle cx="5" cy="12" r="1"/>
           </svg>
         </button>
+        <select
+          className="editor-keymap-select"
+          value={editorKeymap}
+          onChange={e => setEditorKeymap(e.target.value as EditorKeymapMode)}
+          title="Editor keybindings"
+        >
+          <option value="default">Default keys</option>
+          <option value="vim">Vim</option>
+          <option value="emacs">Emacs</option>
+        </select>
       </div>
     </div>
   );

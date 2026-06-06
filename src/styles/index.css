@@ -902,10 +902,24 @@ body {
   border-radius: 6px;
 }
 
-/* Markdown cell editor (no surrounding code-cell chrome) */
+/* Markdown cell gets a subtle box so it's visually delimited like code cells */
+.cell-markdown {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin: 4px 0;
+  overflow: hidden;
+}
+
 .cell-markdown .cm-editor-host .cm-content {
-  padding-left: 4px;
-  padding-right: 4px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+/* Focused code/markdown cell gets an accent border */
+.cell.focused.cell-markdown,
+.cell.focused.cell-code {
+  border-color: var(--accent-color);
 }
 
 .editor-keymap-select {

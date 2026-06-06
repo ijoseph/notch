@@ -80,7 +80,7 @@ export const colorfulHighlightStyle = HighlightStyle.define([
   { tag: [t.variableName, t.definition(t.variableName)], color: palette.variable },
   { tag: [t.tagName, t.angleBracket], color: palette.tagName },
   { tag: [t.attributeValue], color: palette.string },
-  { tag: [t.meta, t.annotation, t.processingInstruction], color: palette.meta },
+  { tag: [t.meta, t.annotation], color: palette.meta },
   { tag: [t.labelName], color: palette.func },
   { tag: [t.punctuation, t.separator, t.bracket, t.paren, t.squareBracket, t.brace], color: palette.punctuation },
   { tag: [t.invalid], color: palette.invalid },
@@ -95,6 +95,8 @@ export const colorfulHighlightStyle = HighlightStyle.define([
   { tag: [t.link, t.url], color: palette.link, textDecoration: 'underline' },
   { tag: [t.monospace], color: palette.prop },
   { tag: [t.quote], color: palette.comment, fontStyle: 'italic' },
-  { tag: [t.list], color: palette.keyword },
   { tag: [t.contentSeparator], color: palette.comment },
+  // Markdown markup punctuation (#, list markers, *, >, `, []) — muted so only
+  // the heading text and inline emphasis stand out, not whole list items.
+  { tag: [t.processingInstruction], color: palette.comment },
 ]);

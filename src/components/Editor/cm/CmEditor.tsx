@@ -19,6 +19,11 @@ import { editorTheme, colorfulHighlightStyle } from './theme';
 // update listener can skip re-reporting them as user edits.
 const External = Annotation.define<boolean>();
 
+// Debounce window for pushing edits to the store. CodeMirror remains the source
+// of truth and paints keystrokes instantly; the (synchronous) store-driven
+// React re-render + DB write happen after the user pauses, off the typing path.
+const FLUSH_DELAY = 150;
+
 interface CmEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -63,6 +68,10 @@ export default function CmEditor({
 
   const keymapCompartment = useRef(new Compartment());
   const languageCompartment = useRef(new Compartment());
+
+  // Tracks unflushed local edits and the pending flush timer.
+  const dirtyRef = useRef(false);
+  const flushTimer = useRef<number | null>(null);
 
   // Create the editor once.
   useEffect(() => {
@@ -111,16 +120,40 @@ export default function CmEditor({
       ])
     );
 
+    // Push the current document to the store. Reads the latest doc at call time
+    // (not per keystroke) so coalesced edits always report the newest content.
+    const flush = () => {
+      if (flushTimer.current != null) {
+        clearTimeout(flushTimer.current);
+        flushTimer.current = null;
+      }
+      if (!dirtyRef.current) return;
+      dirtyRef.current = false;
+      const v = viewRef.current;
+      if (v) cb.current.onChange(v.state.doc.toString());
+    };
+
+    const scheduleFlush = () => {
+      if (flushTimer.current != null) clearTimeout(flushTimer.current);
+      flushTimer.current = window.setTimeout(flush, FLUSH_DELAY);
+    };
+
     const updateListener = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         const isExternal = update.transactions.some((tr) => tr.annotation(External));
-        if (!isExternal) cb.current.onChange(update.state.doc.toString());
+        if (!isExternal) {
+          dirtyRef.current = true;
+          scheduleFlush();
+        }
       }
     });
 
     const domHandlers = EditorView.domEventHandlers({
       focus: () => cb.current.onFocus?.(),
-      blur: () => cb.current.onBlur?.(),
+      blur: () => {
+        flush();
+        cb.current.onBlur?.();
+      },
     });
 
     const state = EditorState.create({
@@ -156,16 +189,19 @@ export default function CmEditor({
       view.focus();
     }
     return () => {
+      flush(); // persist any unflushed edits before tearing down
       view.destroy();
       viewRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync external value changes (e.g. another pane editing the same cell).
+  // Sync external value changes (e.g. loading a different note). Skipped while
+  // there are unflushed local edits so the editor isn't reverted to a stale
+  // store value mid-typing.
   useEffect(() => {
     const view = viewRef.current;
-    if (!view) return;
+    if (!view || dirtyRef.current) return;
     const current = view.state.doc.toString();
     if (value !== current) {
       view.dispatch({

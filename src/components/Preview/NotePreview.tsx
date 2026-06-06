@@ -1,11 +1,11 @@
-import { useMemo, useEffect, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { marked } from 'marked';
 import hljs from 'highlight.js';
 import katex from 'katex';
 import mermaid from 'mermaid';
 import DOMPurify from 'dompurify';
 import type { Config } from 'dompurify';
-import type { Note } from '../../types';
+import type { Cell, Note } from '../../types';
 // Side-effect import: registers the shared image extension (handles `=800x`
 // sizing and resolves local image paths) on the marked singleton.
 import '../../utils/markdown';
@@ -69,128 +69,122 @@ marked.use({
   },
 });
 
-export default function NotePreview({ note }: NotePreviewProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const content = useMemo(() => {
-    return note.cells.map((cell, index) => {
-      const key = `cell-${cell.id}-${index}`;
-
-      switch (cell.type) {
-        case 'text':
-          return (
-            <div
-              key={key}
-              className="preview-cell preview-text cell-richtext"
-              dangerouslySetInnerHTML={{
-                __html: DOMPurify.sanitize(cell.data, sanitizeConfig)
-              }}
-            />
-          );
-
-        case 'code':
-          const highlighted = cell.language && hljs.getLanguage(cell.language)
-            ? hljs.highlight(cell.data, { language: cell.language }).value
-            : cell.data;
-          return (
-            <div key={key} className="preview-cell preview-code">
-              <pre
-                className={`hljs language-${cell.language || 'plaintext'}`}
-                dangerouslySetInnerHTML={{
-                  __html: addLineNumbers(cell.data, highlighted)
-                }}
-              />
-            </div>
-          );
-
-        case 'markdown':
-          try {
-            const html = marked.parse(cell.data) as string;
-            return (
-              <div
-                key={key}
-                className="preview-cell markdown-preview"
-                dangerouslySetInnerHTML={{ __html: html }}
-              />
-            );
-          } catch {
-            return (
-              <div key={key} className="preview-cell preview-text">
-                <p>{cell.data}</p>
-              </div>
-            );
-          }
-
-        case 'latex':
-          try {
-            const latexHtml = katex.renderToString(cell.data, {
-              displayMode: true,
-              throwOnError: false,
-              output: 'html',
-            });
-            return (
-              <div
-                key={key}
-                className="preview-cell latex-preview"
-                dangerouslySetInnerHTML={{ __html: latexHtml }}
-              />
-            );
-          } catch {
-            return (
-              <div key={key} className="preview-cell preview-text">
-                <p style={{ color: 'var(--danger-color)' }}>Invalid LaTeX</p>
-              </div>
-            );
-          }
-
-        case 'diagram':
-          return (
-            <div
-              key={key}
-              className="preview-cell diagram-preview"
-              data-diagram={cell.data}
-            />
-          );
-
-        default:
-          return (
-            <div key={key} className="preview-cell preview-text">
-              <p>{cell.data}</p>
-            </div>
-          );
-      }
-    });
-  }, [note.cells]);
-
-  // Render mermaid diagrams after mount
+// Renders a single mermaid diagram, re-rendering only when its source changes.
+function DiagramPreview({ code }: { code: string }) {
+  const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const renderDiagrams = async () => {
-      if (!containerRef.current) return;
-
-      const diagramElements = containerRef.current.querySelectorAll('[data-diagram]');
-      for (const el of diagramElements) {
-        const code = el.getAttribute('data-diagram');
-        if (!code) continue;
-
-        try {
-          const id = `mermaid-preview-${Math.random().toString(36).substr(2, 9)}`;
-          const { svg } = await mermaid.render(id, code);
-          el.innerHTML = svg;
-        } catch {
-          el.innerHTML = '<span style="color: var(--danger-color)">Invalid diagram</span>';
+    let cancelled = false;
+    const el = ref.current;
+    if (!el) return;
+    if (!code.trim()) {
+      el.innerHTML = '';
+      return;
+    }
+    const id = `mermaid-preview-${Math.random().toString(36).slice(2, 11)}`;
+    mermaid
+      .render(id, code)
+      .then(({ svg }) => {
+        if (!cancelled && ref.current) ref.current.innerHTML = svg;
+      })
+      .catch(() => {
+        if (!cancelled && ref.current) {
+          ref.current.innerHTML = '<span style="color: var(--danger-color)">Invalid diagram</span>';
         }
-      }
+      });
+    return () => {
+      cancelled = true;
     };
+  }, [code]);
+  return <div className="preview-cell diagram-preview" ref={ref} />;
+}
 
-    renderDiagrams();
-  }, [note.cells]);
+// Renders one cell. Memoized so that editing one cell doesn't re-parse every
+// other cell in the note (the store preserves object identity for unchanged
+// cells, so React.memo skips them).
+const PreviewCell = memo(function PreviewCell({ cell }: { cell: Cell }) {
+  switch (cell.type) {
+    case 'text':
+      return (
+        <div
+          className="preview-cell preview-text cell-richtext"
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(cell.data, sanitizeConfig) }}
+        />
+      );
+
+    case 'code': {
+      const highlighted =
+        cell.language && hljs.getLanguage(cell.language)
+          ? hljs.highlight(cell.data, { language: cell.language }).value
+          : cell.data;
+      return (
+        <div className="preview-cell preview-code">
+          <pre
+            className={`hljs language-${cell.language || 'plaintext'}`}
+            dangerouslySetInnerHTML={{ __html: addLineNumbers(cell.data, highlighted) }}
+          />
+        </div>
+      );
+    }
+
+    case 'markdown':
+      try {
+        const html = marked.parse(cell.data) as string;
+        return (
+          <div
+            className="preview-cell markdown-preview"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        );
+      } catch {
+        return (
+          <div className="preview-cell preview-text">
+            <p>{cell.data}</p>
+          </div>
+        );
+      }
+
+    case 'latex':
+      try {
+        const latexHtml = katex.renderToString(cell.data, {
+          displayMode: true,
+          throwOnError: false,
+          output: 'html',
+        });
+        return (
+          <div
+            className="preview-cell latex-preview"
+            dangerouslySetInnerHTML={{ __html: latexHtml }}
+          />
+        );
+      } catch {
+        return (
+          <div className="preview-cell preview-text">
+            <p style={{ color: 'var(--danger-color)' }}>Invalid LaTeX</p>
+          </div>
+        );
+      }
+
+    case 'diagram':
+      return <DiagramPreview code={cell.data} />;
+
+    default:
+      return (
+        <div className="preview-cell preview-text">
+          <p>{cell.data}</p>
+        </div>
+      );
+  }
+});
+
+export default function NotePreview({ note }: NotePreviewProps) {
+  const tags = useMemo(() => note.tags, [note.tags]);
 
   return (
-    <div ref={containerRef} className="note-preview-content">
+    <div className="note-preview-content">
       <h1 style={{ marginBottom: '24px' }}>{note.title || 'Untitled'}</h1>
-      {note.tags.length > 0 && (
+      {tags.length > 0 && (
         <div style={{ marginBottom: '16px' }}>
-          {note.tags.map(tag => (
+          {tags.map(tag => (
             <span
               key={tag}
               style={{
@@ -210,7 +204,9 @@ export default function NotePreview({ note }: NotePreviewProps) {
         </div>
       )}
       <div className="preview-cells">
-        {content}
+        {note.cells.map(cell => (
+          <PreviewCell key={cell.id} cell={cell} />
+        ))}
       </div>
     </div>
   );

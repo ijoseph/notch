@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { marked } from 'marked';
 import hljs from 'highlight.js';
+// Side-effect import: registers the shared image extension (handles `=800x`
+// sizing and resolves local image paths) on the marked singleton.
+import '../../../utils/markdown';
+import { importImageFile } from '../../../services/images';
 
 interface MarkdownCellProps {
   data: string;
@@ -90,6 +94,72 @@ export default function MarkdownCell({ data, onChange, onFocus, isFocused, onBac
     onChange(e.target.value);
   };
 
+  // Insert text at the current cursor position (or replacing the selection),
+  // then place the cursor right after the inserted text.
+  const insertAtCursor = (text: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      onChange(data + text);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const newValue = data.slice(0, start) + text + data.slice(end);
+    onChange(newValue);
+    requestAnimationFrame(() => {
+      const pos = start + text.length;
+      textarea.selectionStart = textarea.selectionEnd = pos;
+    });
+  };
+
+  // Import a set of image files: persist each to disk and insert the resulting
+  // markdown (with the default `=800x` sizing) at the cursor in one edit.
+  const importImages = async (files: File[]) => {
+    const snippets: string[] = [];
+    for (const file of files) {
+      try {
+        snippets.push(await importImageFile(file));
+      } catch (err) {
+        console.error('Failed to import image:', err);
+      }
+    }
+    if (snippets.length > 0) {
+      insertAtCursor(snippets.join('\n') + '\n');
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const images: File[] = [];
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) images.push(file);
+      }
+    }
+    if (images.length > 0) {
+      e.preventDefault();
+      void importImages(images);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLTextAreaElement>) => {
+    if (Array.from(e.dataTransfer?.items ?? []).some(i => i.kind === 'file')) {
+      e.preventDefault();
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.dataTransfer?.files ?? []).filter(f =>
+      f.type.startsWith('image/')
+    );
+    if (files.length > 0) {
+      e.preventDefault();
+      void importImages(files);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -150,6 +220,9 @@ export default function MarkdownCell({ data, onChange, onFocus, isFocused, onBac
         onChange={handleChange}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       />
     );
   }

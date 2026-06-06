@@ -13,6 +13,7 @@ import type {
   AppActions,
 } from '../types';
 import * as db from '../services/database';
+import { initImageStore } from '../services/images';
 import { getNotebookSubtreeIds } from '../utils/notebooks';
 
 type Store = AppState & AppActions;
@@ -371,6 +372,9 @@ export const useStore = create<Store>((set, get) => ({
 
   loadData: async () => {
     await db.initDatabase();
+    // Resolve the images directory (next to the DB) before any markdown with
+    // local image paths is rendered, so resolveImageSrc() has a base dir.
+    await initImageStore();
     const tags = await db.getAllTags();
     const notes = await db.getAllNotes();
 

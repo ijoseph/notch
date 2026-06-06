@@ -6,6 +6,9 @@ import { renderMarkdown } from '../../services/markdown';
 import { sanitizeRichText } from '../../services/html';
 import { resolveResourceHtml, useResourceVersion } from '../../services/resources';
 import type { Note } from '../../types';
+// Side-effect import: registers the shared image extension (handles `=800x`
+// sizing and resolves local image paths) on the marked singleton.
+import '../../utils/markdown';
 
 interface NotePreviewProps {
   note: Note;

@@ -60,6 +60,9 @@ export type SpecialCollection = 'inbox' | 'favorites' | 'recents' | 'all' | 'tra
 // View mode for the editor
 export type EditorViewMode = 'editor' | 'preview' | 'split';
 
+// Optional modal keybindings for the code/markdown editors
+export type EditorKeymapMode = 'default' | 'vim' | 'emacs';
+
 // Layout mode for the app
 export type LayoutMode = 'single' | 'double' | 'triple';
 
@@ -72,6 +75,7 @@ export interface AppState {
   // UI state
   layoutMode: LayoutMode;
   editorViewMode: EditorViewMode;
+  editorKeymap: EditorKeymapMode;
   sidebarVisible: boolean;
 
   // Selection state
@@ -99,6 +103,7 @@ export interface AppActions {
   // Layout actions
   setLayoutMode: (mode: LayoutMode) => void;
   setEditorViewMode: (mode: EditorViewMode) => void;
+  setEditorKeymap: (mode: EditorKeymapMode) => void;
   toggleSidebar: () => void;
 
   // Selection actions

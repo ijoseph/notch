@@ -329,14 +329,19 @@ export default function App() {
   useEffect(() => {
     // Setup keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
+      // CodeMirror cells manage their own undo/redo history — don't also fire
+      // execCommand, which would undo twice.
+      const inCodeMirror = !!(e.target as HTMLElement)?.closest?.('.cm-editor');
       // Cmd+Z: Undo (let browser handle it for contentEditable)
       if (e.metaKey && e.key === 'z' && !e.shiftKey) {
+        if (inCodeMirror) return;
         // Don't prevent default - let browser handle undo
         document.execCommand('undo');
         return;
       }
       // Cmd+Shift+Z: Redo
       if (e.metaKey && e.key === 'z' && e.shiftKey) {
+        if (inCodeMirror) return;
         document.execCommand('redo');
         return;
       }

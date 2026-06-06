@@ -9,6 +9,7 @@ import type {
   LayoutMode,
   SortBy,
   SortOrder,
+  EditorKeymapMode,
   AppState,
   AppActions,
 } from '../types';
@@ -18,10 +19,18 @@ import { getNotebookSubtreeIds } from '../utils/notebooks';
 
 type Store = AppState & AppActions;
 
+const KEYMAP_STORAGE_KEY = 'notch:editorKeymap';
+
+function loadEditorKeymap(): EditorKeymapMode {
+  const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(KEYMAP_STORAGE_KEY) : null;
+  return stored === 'vim' || stored === 'emacs' ? stored : 'default';
+}
+
 export const useStore = create<Store>((set, get) => ({
   // Initial UI state
   layoutMode: 'triple',
   editorViewMode: 'split',
+  editorKeymap: loadEditorKeymap(),
   sidebarVisible: true,
 
   // Initial selection state
@@ -48,6 +57,11 @@ export const useStore = create<Store>((set, get) => ({
   setLayoutMode: (mode: LayoutMode) => set({ layoutMode: mode }),
 
   setEditorViewMode: (mode: EditorViewMode) => set({ editorViewMode: mode }),
+
+  setEditorKeymap: (mode: EditorKeymapMode) => {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(KEYMAP_STORAGE_KEY, mode);
+    set({ editorKeymap: mode });
+  },
 
   toggleSidebar: () => set(state => ({ sidebarVisible: !state.sidebarVisible })),
 
@@ -402,4 +416,5 @@ export const useSelectedNote = () => {
 };
 export const useLayoutMode = () => useStore(state => state.layoutMode);
 export const useEditorViewMode = () => useStore(state => state.editorViewMode);
+export const useEditorKeymap = () => useStore(state => state.editorKeymap);
 export const useSidebarVisible = () => useStore(state => state.sidebarVisible);

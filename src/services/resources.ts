@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from 'react';
 import * as db from './database';
+import { onResourcesInvalidated, resourceRevision } from './resourceInvalidation';
 
 // In-memory cache mapping resource id -> a ready-to-use data: URL. Resources are
 // stored in SQLite as base64 text (see database.ts) and resolved to data URLs on
 // demand so cell content only ever holds a stable `notch-resource://<id>` ref.
 interface CachedResource {
+  noteId: string;
   dataUrl: string;
   mimeType: string;
   filename: string;
@@ -28,22 +30,51 @@ function toDataUrl(base64: string, mimeType: string): string {
   return `data:${mimeType || 'application/octet-stream'};base64,${base64}`;
 }
 
-/** Load all resources for a note into the cache. Idempotent. */
-export async function loadResourcesForNote(noteId: string): Promise<void> {
-  const resources = await db.getResourcesByNote(noteId);
-  let changed = false;
-  for (const resource of resources) {
-    if (!cache.has(resource.id)) {
-      cache.set(resource.id, {
-        dataUrl: toDataUrl(resource.data, resource.mimeType ?? ''),
-        mimeType: resource.mimeType ?? '',
-        filename: resource.filename,
-      });
-      changed = true;
-    }
+const loadedNotes = new Set<string>();
+const loadingNotes = new Map<string, Promise<void>>();
+onResourcesInvalidated((noteId, remove) => {
+  if (noteId === undefined) { cache.clear(); loadedNotes.clear(); loadingNotes.clear(); }
+  else {
+    loadedNotes.delete(noteId); loadingNotes.delete(noteId);
+    // Resource creation is append-only: existing cached images remain valid.
+    if (remove) for (const [id, resource] of cache) if (resource.noteId === noteId) cache.delete(id);
   }
-  if (changed) bump();
+  bump();
+});
+
+/** Share concurrent reads, including empty notes; writes invalidate this state. */
+export function loadResourcesForNote(noteId: string): Promise<void> {
+  if (loadedNotes.has(noteId)) return Promise.resolve();
+  const pending = loadingNotes.get(noteId);
+  if (pending) return pending;
+  const revision = resourceRevision(noteId);
+  const work = (async () => {
+    const resources = await db.getResourcesByNote(noteId);
+    // An old library read must never populate the new library's cache.
+    if (revision !== resourceRevision(noteId)) return;
+    let changed = false;
+    for (const resource of resources) {
+      if (!cache.has(resource.id)) {
+        cache.set(resource.id, {
+          noteId,
+          dataUrl: toDataUrl(resource.data, resource.mimeType ?? ''),
+          mimeType: resource.mimeType ?? '',
+          filename: resource.filename,
+        });
+        changed = true;
+      }
+    }
+    loadedNotes.add(noteId);
+    if (changed) bump();
+  })();
+  loadingNotes.set(noteId, work);
+  void work.finally(() => {
+    if (loadingNotes.get(noteId) === work) loadingNotes.delete(noteId);
+  }).catch(() => {});
+  return work;
 }
+
+export function getResourceVersion(): number { return version; }
 
 export function getResourceDataUrl(id: string): string | undefined {
   return cache.get(id)?.dataUrl;
@@ -66,7 +97,7 @@ export async function createResourceFromBase64(
   base64: string
 ): Promise<string> {
   const resource = await db.createResource(noteId, filename, mimeType, base64);
-  cache.set(resource.id, { dataUrl: toDataUrl(base64, mimeType), mimeType, filename });
+  cache.set(resource.id, { noteId, dataUrl: toDataUrl(base64, mimeType), mimeType, filename });
   bump();
   return resource.id;
 }

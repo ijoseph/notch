@@ -1,0 +1,11 @@
+import {Database} from 'bun:sqlite';
+import {mock} from 'bun:test';
+const sql=new Database(':memory:');let reads=0,bytes=0;
+mock.module('@tauri-apps/plugin-sql',()=>({default:{load:async()=>({execute:async(q:string,v:any[]=[])=>sql.query(q).run(...v),select:async(q:string,v:any[]=[])=>{const rows:any[]=sql.query(q).all(...v);if(q.includes('SELECT * FROM resources')){reads++;bytes+=rows.reduce((n,r)=>n+r.data.length,0)}return rows;},close:async()=>{}})}}));
+const db=await import('../../src/services/database');const resources=await import('../../src/services/resources');
+await db.initDatabase('sqlite:round5-resources');const book=await db.createNotebook('Synthetic');const note=await db.createNote(book.id,'Image fixture');
+const data=Buffer.alloc(2*1024*1024).toString('base64');
+await db.createResource(note.id,'synthetic.png','image/png',data);
+await resources.loadResourcesForNote(note.id);reads=0;bytes=0;
+for(let i=0;i<10;i++)await resources.loadResourcesForNote(note.id);
+console.log(JSON.stringify({binaryImageBytes:2*1024*1024,cachedReloads:10,resourceQueries:reads,returnedBase64Bytes:bytes},null,2));

@@ -1,0 +1,72 @@
+{
+  "noteBodyBytes": 11426,
+  "iterations": 5,
+  "results": [
+    {
+      "size": 100,
+      "query": "common",
+      "requestedLimit": 50,
+      "returned": 50,
+      "sqlReads": 3,
+      "hydratedCells": 100,
+      "hydratedBodyBytes": 1142600,
+      "sqliteAndMappingMedianMs": 0.8,
+      "maxMs": 1.13
+    },
+    {
+      "size": 100,
+      "query": "absent-token-zzzzz",
+      "requestedLimit": 50,
+      "returned": 0,
+      "sqlReads": 1,
+      "hydratedCells": 0,
+      "hydratedBodyBytes": 0,
+      "sqliteAndMappingMedianMs": 0.03,
+      "maxMs": 0.04
+    },
+    {
+      "size": 1000,
+      "query": "common",
+      "requestedLimit": 50,
+      "returned": 50,
+      "sqlReads": 5,
+      "hydratedCells": 1000,
+      "hydratedBodyBytes": 11426000,
+      "sqliteAndMappingMedianMs": 8.29,
+      "maxMs": 9.94
+    },
+    {
+      "size": 1000,
+      "query": "absent-token-zzzzz",
+      "requestedLimit": 50,
+      "returned": 0,
+      "sqlReads": 1,
+      "hydratedCells": 0,
+      "hydratedBodyBytes": 0,
+      "sqliteAndMappingMedianMs": 0.04,
+      "maxMs": 0.05
+    },
+    {
+      "size": 5000,
+      "query": "common",
+      "requestedLimit": 50,
+      "returned": 50,
+      "sqlReads": 21,
+      "hydratedCells": 5000,
+      "hydratedBodyBytes": 57130000,
+      "sqliteAndMappingMedianMs": 37.43,
+      "maxMs": 42.43
+    },
+    {
+      "size": 5000,
+      "query": "absent-token-zzzzz",
+      "requestedLimit": 50,
+      "returned": 0,
+      "sqlReads": 1,
+      "hydratedCells": 0,
+      "hydratedBodyBytes": 0,
+      "sqliteAndMappingMedianMs": 0.04,
+      "maxMs": 0.05
+    }
+  ]
+}

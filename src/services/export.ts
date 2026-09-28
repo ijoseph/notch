@@ -4,7 +4,8 @@ import katex from 'katex';
 import type { Note, Cell } from '../types';
 import * as db from './database';
 import { renderMarkdown } from './markdown';
-import { resolveResourceHtml, inlineResourceRefs } from './resources';
+import { resolveResourceHtml, inlineResourceRefs, getResourceVersion } from './resources';
+import type { PreviewContent } from './previewContent';
 import { renderDiagram } from './diagrams';
 import { sanitizeRichText } from './html';
 import { parseLibraryBackup } from './backup';
@@ -143,15 +144,44 @@ export function exportNoteToHTML(note: Note): string {
 </html>`;
 }
 
-/** Fully rendered, offline content for floating preview and native PDF printing. */
+/** Retain only the current note; unchanged cells share their rendered HTML. */
+export function createPrintRenderer() {
+  let noteId: string | undefined;
+  const cells = new Map<string, { cell: Cell; resources: number; html: Promise<string> }>();
+  const clear = () => { cells.clear(); noteId = undefined; };
+  const render = async (note: Note): Promise<PreviewContent> => {
+    if (noteId !== note.id) { clear(); noteId = note.id; }
+    const ids = new Set(note.cells.map(cell => cell.id));
+    for (const id of cells.keys()) if (!ids.has(id)) cells.delete(id);
+    const resources = getResourceVersion();
+    const rendered = await Promise.all(note.cells.map(cell => {
+      const cached = cells.get(cell.id);
+      const same = cached && cached.resources === resources && cached.cell.type === cell.type
+        && cached.cell.data === cell.data && cached.cell.language === cell.language && cached.cell.diagramType === cell.diagramType;
+      if (same) return cached.html.then(html => ({ id: cell.id, html }));
+      const html = renderPrintCell(cell);
+      const entry = { cell: { ...cell }, resources, html };
+      cells.set(cell.id, entry);
+      void html.catch(() => { if (cells.get(cell.id) === entry) cells.delete(cell.id); });
+      return html.then(html => ({ id: cell.id, html }));
+    }));
+    return { noteId: note.id, title: note.title,
+      headerHtml: `<h1>${escapeHtml(note.title || 'Untitled')}</h1>`
+        + (note.tags.length ? `<p>${note.tags.map(tag => '#' + escapeHtml(tag)).join(' ')}</p>` : ''),
+      cells: rendered };
+  };
+  return { render, clear };
+}
+async function renderPrintCell(cell: Cell): Promise<string> {
+  if (cell.type !== 'diagram') return renderCellToHTML(cell);
+  try { return `<div class="diagram-preview">${await renderDiagram(cell.data, cell.diagramType || 'flow', 'light')}</div>`; }
+  catch { return `<pre>${escapeHtml(cell.data)}</pre><p>Unable to render diagram.</p>`; }
+}
+const printRenderer = createPrintRenderer();
+/** Fully rendered, offline content for PDF printing and export. */
 export async function exportNoteToPrintHTML(note: Note): Promise<string> {
-  const cells = await Promise.all(note.cells.map(async cell => {
-    if (cell.type !== 'diagram') return renderCellToHTML(cell);
-    try { return `<div class="diagram-preview">${await renderDiagram(cell.data, cell.diagramType || 'flow', 'light')}</div>`; }
-    catch { return `<pre>${escapeHtml(cell.data)}</pre><p>Unable to render diagram.</p>`; }
-  }));
-  return `<h1>${escapeHtml(note.title || 'Untitled')}</h1>`
-    + (note.tags.length ? `<p>${note.tags.map(tag => '#' + escapeHtml(tag)).join(' ')}</p>` : '') + cells.join('\n');
+  const content = await printRenderer.render(note);
+  return content.headerHtml + content.cells.map(cell => cell.html).join('\n');
 }
 
 function renderCellToHTML(cell: Cell): string {

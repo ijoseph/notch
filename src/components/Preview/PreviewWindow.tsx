@@ -2,17 +2,18 @@ import { useEffect, useState, useRef } from 'react';
 import { emitTo, listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-shell';
+import { applyPreviewUpdate, type PreviewContent, type PreviewUpdate } from '../../services/previewContent';
 
 export default function PreviewWindow({ label }: { label: string }) {
-  const [content, setContent] = useState<{ title: string; html: string } | null>(null);
+  const [content, setContent] = useState<PreviewContent | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let stopped = false;
     let unlisten: (() => void) | undefined;
-    void listen<{ title: string; html: string }>('preview-content', event => {
-      setReady(false); setContent(event.payload); document.title = event.payload.title || 'Preview';
+    void listen<PreviewUpdate>('preview-content', event => {
+      setReady(false); setContent(previous => applyPreviewUpdate(previous, event.payload)); document.title = event.payload.title || 'Preview';
     }).then(async fn => {
       if (stopped) { fn(); return; }
       unlisten = fn;
@@ -47,6 +48,9 @@ export default function PreviewWindow({ label }: { label: string }) {
       } else if (/^(https?:\/\/|mailto:|tel:)/i.test(href)) {
         void open(href).catch(err => setError(String(err)));
       }
-    }} dangerouslySetInnerHTML={{ __html: content?.html ?? '' }} />
+    }}>
+      {content && <div dangerouslySetInnerHTML={{ __html: content.headerHtml }} />}
+      {content?.cells.map(cell => <div key={cell.id} dangerouslySetInnerHTML={{ __html: cell.html }} />)}
+    </div>
   </div>;
 }

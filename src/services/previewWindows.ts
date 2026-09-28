@@ -3,9 +3,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { message } from '@tauri-apps/plugin-dialog';
 import { useStore, flushPendingChanges } from '../store';
 import { loadResourcesForNote } from './resources';
-import { exportNoteToPrintHTML } from './export';
+import { createPrintRenderer } from './export';
+import { previewUpdate, type PreviewContent } from './previewContent';
 
-type Snapshot = { title: string; html: string };
+type Snapshot = PreviewContent;
+const renderer = createPrintRenderer();
 const snapshots = new Map<string, Snapshot>();
 let revision = 0;
 async function snapshot(): Promise<Snapshot | null> {
@@ -16,7 +18,7 @@ async function snapshot(): Promise<Snapshot | null> {
   const note = useStore.getState().notes.find(n => n.id === id);
   if (!note) return null;
   await loadResourcesForNote(id);
-  return { title: note.title, html: await exportNoteToPrintHTML(note) };
+  return renderer.render(note);
 }
 export async function openPreview(printing = false): Promise<void> {
   try {
@@ -26,7 +28,7 @@ export async function openPreview(printing = false): Promise<void> {
     const label = printing ? 'pdf-preview' : 'floating-preview';
     snapshots.set(label, content);
     await invoke('open_preview', { printing });
-    await emitTo(label, 'preview-content', content);
+    await emitTo(label, 'preview-content', previewUpdate(content));
   } catch (error) { await message(String(error), { title: 'Preview failed', kind: 'error' }); }
 }
 export function connectPreviewWindows(): () => void {
@@ -38,11 +40,11 @@ export function connectPreviewWindows(): () => void {
   void listen<string>('preview-ready', async event => {
     if (event.payload !== 'floating-preview' && event.payload !== 'pdf-preview') return;
     const content = snapshots.get(event.payload);
-    if (content) await emitTo(event.payload, 'preview-content', content);
+    if (content) await emitTo(event.payload, 'preview-content', previewUpdate(content));
   }).then(fn => { if (stopped) fn(); else unlisten = fn; });
   void listen<string>('preview-closed', event => {
     snapshots.delete(event.payload);
-    if (event.payload === 'floating-preview') { clearTimeout(timer); revision++; }
+    if (event.payload === 'floating-preview') { clearTimeout(timer); revision++; renderer.clear(); }
   }).then(fn => { if (stopped) fn(); else unlistenClosed = fn; });
   void listen<string>('preview-navigate', event => {
     window.dispatchEvent(new CustomEvent('notch-navigate', { detail: { href: event.payload } }));
@@ -56,10 +58,11 @@ export function connectPreviewWindows(): () => void {
     clearTimeout(timer);
     timer = setTimeout(async () => {
       try {
-        const content = await snapshot() ?? { title: 'Preview', html: '<p>No note selected</p>' };
+        const content = await snapshot() ?? { noteId: '', title: 'Preview', headerHtml: '<p>No note selected</p>', cells: [] };
         if (stopped || current !== revision) return;
+        const update = previewUpdate(content, snapshots.get('floating-preview'));
         snapshots.set('floating-preview', content);
-        await emitTo('floating-preview', 'preview-content', content);
+        await emitTo('floating-preview', 'preview-content', update);
       } catch (error) { console.warn('Preview update failed:', error); }
     }, 200);
   });

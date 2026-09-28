@@ -1,0 +1,101 @@
+{
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+  "results": [
+    {
+      "count": 20,
+      "lines": 800,
+      "round": 1,
+      "inline": {
+        "medianMs": 0.2,
+        "p95Ms": 0.3,
+        "maxMs": 0.5
+      },
+      "floatingSerialization": {
+        "medianMs": 10.3,
+        "p95Ms": 11,
+        "maxMs": 11.7
+      },
+      "htmlBytes": 188415
+    },
+    {
+      "count": 20,
+      "lines": 800,
+      "round": 2,
+      "inline": {
+        "medianMs": 0.2,
+        "p95Ms": 0.3,
+        "maxMs": 0.3
+      },
+      "floatingSerialization": {
+        "medianMs": 9.2,
+        "p95Ms": 10.5,
+        "maxMs": 10.9
+      },
+      "htmlBytes": 188415
+    },
+    {
+      "count": 20,
+      "lines": 800,
+      "round": 3,
+      "inline": {
+        "medianMs": 0.2,
+        "p95Ms": 0.3,
+        "maxMs": 0.6
+      },
+      "floatingSerialization": {
+        "medianMs": 10.1,
+        "p95Ms": 11,
+        "maxMs": 11.5
+      },
+      "htmlBytes": 188415
+    },
+    {
+      "count": 100,
+      "lines": 4000,
+      "round": 1,
+      "inline": {
+        "medianMs": 0.2,
+        "p95Ms": 0.3,
+        "maxMs": 0.3
+      },
+      "floatingSerialization": {
+        "medianMs": 44.5,
+        "p95Ms": 49.3,
+        "maxMs": 69.1
+      },
+      "htmlBytes": 941695
+    },
+    {
+      "count": 100,
+      "lines": 4000,
+      "round": 2,
+      "inline": {
+        "medianMs": 0.2,
+        "p95Ms": 0.3,
+        "maxMs": 0.3
+      },
+      "floatingSerialization": {
+        "medianMs": 44.6,
+        "p95Ms": 47.4,
+        "maxMs": 73.8
+      },
+      "htmlBytes": 941695
+    },
+    {
+      "count": 100,
+      "lines": 4000,
+      "round": 3,
+      "inline": {
+        "medianMs": 0.2,
+        "p95Ms": 0.2,
+        "maxMs": 0.3
+      },
+      "floatingSerialization": {
+        "medianMs": 45.5,
+        "p95Ms": 50.9,
+        "maxMs": 71.1
+      },
+      "htmlBytes": 941695
+    }
+  ]
+}

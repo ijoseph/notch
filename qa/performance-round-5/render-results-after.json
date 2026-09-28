@@ -1,0 +1,101 @@
+{
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+  "results": [
+    {
+      "count": 20,
+      "lines": 800,
+      "round": 1,
+      "inline": {
+        "medianMs": 0.5,
+        "p95Ms": 0.9,
+        "maxMs": 0.9
+      },
+      "floatingSerialization": {
+        "medianMs": 0.7,
+        "p95Ms": 1.9,
+        "maxMs": 2.1
+      },
+      "htmlBytes": 188415
+    },
+    {
+      "count": 20,
+      "lines": 800,
+      "round": 2,
+      "inline": {
+        "medianMs": 0.6,
+        "p95Ms": 0.8,
+        "maxMs": 0.9
+      },
+      "floatingSerialization": {
+        "medianMs": 0.9,
+        "p95Ms": 1.7,
+        "maxMs": 1.7
+      },
+      "htmlBytes": 188415
+    },
+    {
+      "count": 20,
+      "lines": 800,
+      "round": 3,
+      "inline": {
+        "medianMs": 0.2,
+        "p95Ms": 0.4,
+        "maxMs": 0.5
+      },
+      "floatingSerialization": {
+        "medianMs": 0.3,
+        "p95Ms": 0.5,
+        "maxMs": 0.8
+      },
+      "htmlBytes": 188415
+    },
+    {
+      "count": 100,
+      "lines": 4000,
+      "round": 1,
+      "inline": {
+        "medianMs": 0.2,
+        "p95Ms": 0.3,
+        "maxMs": 0.5
+      },
+      "floatingSerialization": {
+        "medianMs": 1.5,
+        "p95Ms": 1.8,
+        "maxMs": 2.1
+      },
+      "htmlBytes": 941695
+    },
+    {
+      "count": 100,
+      "lines": 4000,
+      "round": 2,
+      "inline": {
+        "medianMs": 0.3,
+        "p95Ms": 0.5,
+        "maxMs": 0.5
+      },
+      "floatingSerialization": {
+        "medianMs": 1.9,
+        "p95Ms": 3,
+        "maxMs": 3.1
+      },
+      "htmlBytes": 941695
+    },
+    {
+      "count": 100,
+      "lines": 4000,
+      "round": 3,
+      "inline": {
+        "medianMs": 0.3,
+        "p95Ms": 0.5,
+        "maxMs": 0.6
+      },
+      "floatingSerialization": {
+        "medianMs": 1.7,
+        "p95Ms": 2.9,
+        "maxMs": 3.1
+      },
+      "htmlBytes": 941695
+    }
+  ]
+}

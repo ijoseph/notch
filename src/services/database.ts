@@ -14,6 +14,7 @@ import type {
 } from '../types';
 import { v4 as uuid } from 'uuid';
 import { searchTerms } from '../utils/searchTerms';
+import { invalidateResources } from './resourceInvalidation';
 
 let db: Database | null = null;
 let currentDbPath: string | null = null;
@@ -33,6 +34,7 @@ export async function initDatabase(dbPath = 'sqlite:notch.db'): Promise<void> {
 
   db = await Database.load(dbPath);
   currentDbPath = dbPath;
+  invalidateResources();
 
   // Create tables
   await db.execute(`
@@ -527,6 +529,7 @@ export async function deleteNote(id: string, permanent = false): Promise<void> {
   if (permanent) {
     // Resources, cells and search entries are removed in the same statement.
     await getDb().execute('DELETE FROM notes WHERE id = ?', [id]);
+    invalidateResources(id, true);
   } else {
     // Soft delete (move to trash)
     await updateNote(id, { isTrashed: true });
@@ -616,6 +619,7 @@ export async function restoreLibrarySnapshot(snapshot: {
     END
   `);
   await getDb().execute('INSERT INTO library_restore_payload (payload) VALUES (?)', [JSON.stringify(snapshot)]);
+  invalidateResources();
 }
 
 export async function toggleNoteFavorite(id: string): Promise<void> {
@@ -972,6 +976,7 @@ export async function createResource(
     'INSERT INTO resources (id, note_id, filename, mime_type, data) VALUES (?, ?, ?, ?, ?)',
     [id, noteId, filename, mimeType ?? null, base64]
   );
+  invalidateResources(noteId);
   return { id, noteId, filename, mimeType, data: base64 };
 }
 
@@ -1079,7 +1084,14 @@ async function rebuildNoteIndex(noteId: string): Promise<void> {
     SELECT rowid,id,title,? FROM notes WHERE id=?`, [content, noteId]);
 }
 
-export async function searchNotes(query: string): Promise<Note[]> {
+export interface SearchOptions {
+  notebookId?: string;
+  includeTrash?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export async function searchNotes(query: string, options: SearchOptions = {}): Promise<Note[]> {
   await flushSearchIndex();
   if (!query.trim()) return [];
 
@@ -1091,15 +1103,23 @@ export async function searchNotes(query: string): Promise<Note[]> {
   // punctuation. SQLite then tokenizes queries the same way as indexed text.
   const ftsQuery = terms.map(term => `"${term.replace(/"/g, '""')}"*`).join(' OR ');
 
+  // Bound work before transferring and hydrating any note bodies.
+  const limit = Number.isFinite(options.limit) && options.limit! > 0 ? Math.min(100, Math.floor(options.limit!)) : 50;
+  const offset = Number.isFinite(options.offset) ? Math.max(0, Math.floor(options.offset!)) : 0;
+  const filters = ["notes_fts MATCH ?"];
+  const values: (string | number)[] = [ftsQuery];
+  if (!options.includeTrash) filters.push('n.is_trashed = 0');
+  if (options.notebookId) { filters.push('n.notebook_id = ?'); values.push(options.notebookId); }
+  values.push(limit, offset);
   let rows: NoteRow[];
   try {
     rows = await getDb().select<NoteRow[]>(
       `SELECT n.*
        FROM notes_fts
        JOIN notes n ON n.id = notes_fts.note_id
-       WHERE notes_fts MATCH ? AND n.is_trashed = 0
-       ORDER BY rank`,
-      [ftsQuery]
+       WHERE ${filters.join(' AND ')}
+       ORDER BY rank, n.id LIMIT ? OFFSET ?`,
+      values
     );
   } catch (err) {
     // FTS5 parser threw (e.g., malformed query) — return no results

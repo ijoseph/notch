@@ -1,11 +1,7 @@
 import * as db from './database';
 import type { Note } from '../types';
 
-export interface SearchOptions {
-  notebookId?: string;
-  includeTrash?: boolean;
-  limit?: number;
-}
+export type SearchOptions = db.SearchOptions;
 
 /**
  * Search notes by full-text query
@@ -18,7 +14,7 @@ export async function searchNotes(
     return [];
   }
 
-  let results = await db.searchNotes(query);
+  let results = await db.searchNotes(query, options);
 
   // Filter by notebook if specified
   if (options.notebookId) {

@@ -1,0 +1,22 @@
+{
+  "sequential": {
+    "edits": 30,
+    "initialBytes": 64669,
+    "totalSqlCalls": 62,
+    "indexedBytes": 64699,
+    "sqliteOnlyElapsedMs": 2.0276250000000005,
+    "calls": {
+      "UPDATE cells SET data = ? WHERE id = ?": 30,
+      "UPDATE notes SET updated_at = ? WHERE id = ?": 30,
+      "SELECT * FROM cells WHERE note_id = ? ORDER BY sort_order": 1,
+      "INSERT OR REPLACE INTO notes_fts (rowid,note_id,title,content) SELECT rowid,id,title,? FROM notes WHERE id=?": 1
+    }
+  },
+  "concurrent": {
+    "concurrentEdits": 30,
+    "indexRows": {
+      "count": 1
+    },
+    "searchResults": 1
+  }
+}

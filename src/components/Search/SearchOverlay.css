@@ -4,3 +4,14 @@
   font-weight: 600;
   border-radius: 2px;
 }
+
+.search-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-color);
+  font-size: 12px;
+}
+.search-pagination button { padding: 4px 10px; }
+.search-pagination button:disabled { opacity: 0.4; }

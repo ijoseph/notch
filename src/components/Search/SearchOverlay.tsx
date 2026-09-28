@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useStore } from '../../store';
 import { searchNotes } from '../../services/search';
 import type { Note } from '../../types';
@@ -12,6 +12,10 @@ interface SearchOverlayProps {
 export default function SearchOverlay({ onClose }: SearchOverlayProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Note[]>([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const notebooks = useStore(state => state.notebooks);
@@ -20,17 +24,37 @@ export default function SearchOverlay({ onClose }: SearchOverlayProps) {
     inputRef.current?.focus();
   }, []);
 
-  const handleSearch = useCallback(async (q: string) => {
-    setQuery(q);
-    if (!q.trim()) {
-      setResults([]);
-      setSelectedIndex(0);
-      return;
-    }
-    const notes = await searchNotes(q);
-    setResults(notes);
-    setSelectedIndex(0);
-  }, []);
+  useEffect(() => {
+    let current = true;
+    if (!query.trim()) { setLoading(false); return; }
+    setLoading(true);
+    const timer = setTimeout(() => {
+      void searchNotes(query, { limit: 51, offset: page * 50 }).then(notes => {
+        if (!current) return;
+        setResults(notes.slice(0, 50));
+        setHasMore(notes.length > 50);
+        setSelectedIndex(0);
+        setLoading(false);
+      }).catch(() => {
+        if (!current) return;
+        setError('Unable to search notes. Please try again.');
+        setLoading(false);
+      });
+    }, 150);
+    return () => { current = false; clearTimeout(timer); };
+  }, [query, page]);
+
+  const clearResults = () => {
+    setResults([]); setSelectedIndex(0); setHasMore(false); setError('');
+  };
+  const handleSearch = (q: string) => {
+    clearResults(); setLoading(!!q.trim()); setPage(0); setQuery(q);
+  };
+  const changePage = (next: number) => {
+    clearResults(); setLoading(true); setPage(next);
+  };
+  // Hover/keyboard selection should not rescan every result's cell bodies.
+  const excerpts = useMemo(() => results.map(note => searchExcerpt(note.cells, query)), [results, query]);
 
   const navigateToNote = useCallback((note: Note) => {
     const state = useStore.getState();
@@ -43,7 +67,7 @@ export default function SearchOverlay({ onClose }: SearchOverlayProps) {
       onClose();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex(i => Math.min(i + 1, results.length - 1));
+      setSelectedIndex(i => Math.max(0, Math.min(i + 1, results.length - 1)));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelectedIndex(i => Math.max(i - 1, 0));
@@ -87,7 +111,7 @@ export default function SearchOverlay({ onClose }: SearchOverlayProps) {
                 <div className="search-result-meta">
                   <span className="search-result-notebook">{getNotebookName(note.notebookId)}</span>
                   <span className="search-result-preview">
-                    {searchExcerpt(note.cells, query).map((part, partIndex) => part.matched
+                    {excerpts[index].map((part, partIndex) => part.matched
                       ? <mark key={partIndex}>{part.text}</mark>
                       : part.text)}
                   </span>
@@ -96,9 +120,16 @@ export default function SearchOverlay({ onClose }: SearchOverlayProps) {
             ))}
           </div>
         )}
-        {query.trim() && results.length === 0 && (
+        {loading && <div className="search-no-results" role="status">Searching…</div>}
+        {error && <div className="search-no-results" role="alert">{error}</div>}
+        {!loading && !error && query.trim() && results.length === 0 && (
           <div className="search-no-results">No results found</div>
         )}
+        {(page > 0 || hasMore) && <div className="search-pagination">
+          <button disabled={page === 0 || loading} onClick={() => changePage(page - 1)}>Previous</button>
+          <span>Page {page + 1}</span>
+          <button disabled={!hasMore || loading} onClick={() => changePage(page + 1)}>Next</button>
+        </div>}
       </div>
     </div>
   );

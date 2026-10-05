@@ -138,7 +138,7 @@ export default function TextCell({
 
   // Auto-focus when cell becomes focused
   useEffect(() => {
-    if (isFocused && editorRef.current && document.activeElement !== editorRef.current) {
+    if (isFocused && !document.activeElement?.closest('.find-bar') && editorRef.current && document.activeElement !== editorRef.current) {
       editorRef.current.focus();
       // Place cursor at end
       const selection = window.getSelection();

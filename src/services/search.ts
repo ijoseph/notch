@@ -2,6 +2,8 @@ import * as db from './database';
 import type { Note } from '../types';
 
 export type SearchOptions = db.SearchOptions;
+export { searchNoteSummaries } from './database';
+export type { SearchSummary } from './database';
 
 /**
  * Search notes by full-text query
@@ -42,6 +44,7 @@ export function searchWithinNote(
   query: string
 ): { cellIndex: number; matches: { start: number; end: number }[] }[] {
   const results: { cellIndex: number; matches: { start: number; end: number }[] }[] = [];
+  if (!query.trim()) return results;
   const lowerQuery = query.toLowerCase();
 
   for (let i = 0; i < note.cells.length; i++) {

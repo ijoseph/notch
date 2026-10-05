@@ -15,6 +15,7 @@ interface LatexCellProps {
 export default function LatexCell({ data, onChange, onFocus, isFocused, focusRequest, onBackspaceEmpty, onNavigatePrev, onNavigateNext }: LatexCellProps) {
   const [isEditing, setIsEditing] = useState(!data);
   const [error, setError] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const html = useMemo(() => {
@@ -51,6 +52,14 @@ export default function LatexCell({ data, onChange, onFocus, isFocused, focusReq
   useEffect(() => {
     if (isFocused) setIsEditing(true);
   }, [isFocused, focusRequest]);
+
+  useEffect(() => {
+    const cell = rootRef.current?.closest('[data-cell-id]');
+    const reveal = () => setIsEditing(true);
+    cell?.addEventListener('notch-find-source', reveal);
+    return () => cell?.removeEventListener('notch-find-source', reveal);
+  }, []);
+  useEffect(() => { rootRef.current?.closest('[data-cell-id]')?.dispatchEvent(new Event('notch-editor-ready')); }, [isEditing]);
 
   const handleClick = () => {
     setIsEditing(true);
@@ -107,7 +116,7 @@ export default function LatexCell({ data, onChange, onFocus, isFocused, focusReq
 
   if (isEditing) {
     return (
-      <div>
+      <div ref={rootRef}>
         <textarea
           ref={textareaRef}
           className="cell-editor"
@@ -127,7 +136,7 @@ export default function LatexCell({ data, onChange, onFocus, isFocused, focusReq
   }
 
   return (
-    <div
+    <div ref={rootRef}
       className="latex-preview"
       onClick={handleClick}
       dangerouslySetInnerHTML={{ __html: html }}

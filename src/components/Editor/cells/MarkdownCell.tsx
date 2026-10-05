@@ -66,7 +66,7 @@ export default function MarkdownCell({ noteId, data, onChange, onFocus, isFocuse
   // navigation), without stealing focus while the user types elsewhere.
   useEffect(() => {
     const ta = textareaRef.current;
-    if (isFocused && ta && document.activeElement !== ta) {
+    if (isFocused && !document.activeElement?.closest('.find-bar') && ta && document.activeElement !== ta) {
       ta.focus();
     }
   }, [isFocused, focusRequest]);

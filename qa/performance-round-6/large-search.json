@@ -1,0 +1,31 @@
+{
+  "noteBodyBytes": 1140026,
+  "iterations": 5,
+  "results": [
+    {
+      "size": 50,
+      "query": "common",
+      "requestedLimit": 50,
+      "returned": 50,
+      "sqlReads": 3,
+      "hydratedCells": 50,
+      "hydratedBodyBytes": 57001300,
+      "sqliteAndMappingMedianMs": 18.37,
+      "maxMs": 25.06
+    },
+    {
+      "size": 50,
+      "query": "absent-token-zzzzz",
+      "requestedLimit": 50,
+      "returned": 0,
+      "sqlReads": 1,
+      "hydratedCells": 0,
+      "hydratedBodyBytes": 0,
+      "sqliteAndMappingMedianMs": 0.16,
+      "maxMs": 0.38
+    }
+  ],
+  "excerptMedianMs": 201.59,
+  "excerptMaxMs": 222.1,
+  "matches": 50
+}

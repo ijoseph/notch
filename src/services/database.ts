@@ -14,23 +14,21 @@ import type {
 } from '../types';
 import { v4 as uuid } from 'uuid';
 import { searchTerms } from '../utils/searchTerms';
+import { cellText } from '../utils/searchExcerpt';
 import { invalidateResources } from './resourceInvalidation';
 
 let db: Database | null = null;
 let currentDbPath: string | null = null;
+let databaseReady = false;
 
 // Initialize the database connection and create tables
 export async function initDatabase(dbPath = 'sqlite:notch.db'): Promise<void> {
-  if (db && currentDbPath === dbPath) return;
+  if (db && currentDbPath === dbPath && databaseReady) return;
+  databaseReady = false;
 
   await flushSearchIndex();
-  if (db) {
-    try {
-      await db.close(currentDbPath ?? undefined);
-    } catch {
-      // Ignore close failures; loading the requested database below is authoritative.
-    }
-  }
+  // Tauri SQL pools are shared by URL across windows. A note window may still
+  // be using the previous library; keep its pool alive until application exit.
 
   db = await Database.load(dbPath);
   currentDbPath = dbPath;
@@ -152,13 +150,16 @@ export async function initDatabase(dbPath = 'sqlite:notch.db'): Promise<void> {
   // were inserted via paths that bypassed updateNoteFTS). Only runs when the
   // FTS table is empty but notes already exist.
   await backfillFTSIfNeeded();
+  await migratePlainSearchText();
+  databaseReady = true;
 }
 
 // Repair old duplicate/stale entries once, atomically even with SQL pooling.
 async function backfillFTSIfNeeded(): Promise<void> {
   await getDb().execute('CREATE TABLE IF NOT EXISTS search_migrations (version INTEGER PRIMARY KEY)');
-  await getDb().execute(`CREATE TRIGGER IF NOT EXISTS repair_search_index AFTER INSERT ON search_migrations
-    BEGIN
+  await getDb().execute('DROP TRIGGER IF EXISTS repair_search_index');
+  await getDb().execute(`CREATE TRIGGER repair_search_index AFTER INSERT ON search_migrations
+    WHEN NEW.version = 1 BEGIN
       DELETE FROM notes_fts;
       INSERT INTO notes_fts (rowid, note_id, title, content)
         SELECT n.rowid, n.id, n.title, COALESCE((SELECT group_concat(data, char(10))
@@ -178,6 +179,29 @@ async function backfillFTSIfNeeded(): Promise<void> {
       UPDATE notes SET updated_at=CAST(strftime('%s','now') AS INTEGER)*1000 WHERE id=NEW.note_id;
       DELETE FROM cell_changes WHERE note_id=NEW.note_id;
     END`);
+}
+
+// Upgrade old HTML indexes once. Each bounded batch is atomic; an interrupted
+// migration is safely repeated because its completion marker is written last.
+async function migratePlainSearchText(force = false): Promise<void> {
+  if (force) await getDb().execute('DELETE FROM search_migrations WHERE version = 2');
+  const done = await getDb().select<{ version: number }[]>('SELECT version FROM search_migrations WHERE version = 2');
+  if (done.length) return;
+  const notes = await getDb().select<{ id: string }[]>('SELECT id FROM notes');
+  for (let i = 0; i < notes.length; i += 25) {
+    const ids = notes.slice(i, i + 25).map(note => note.id);
+    const rows = await getDb().select<CellRow[]>(`SELECT * FROM cells WHERE note_id IN (${ids.map(() => '?').join(',')}) ORDER BY note_id, sort_order`, ids);
+    const content = new Map<string, string[]>();
+    for (const cell of rows) {
+      const parts = content.get(cell.note_id) ?? [];
+      parts.push(cellText(cell)); content.set(cell.note_id, parts);
+    }
+    await getDb().execute(`INSERT OR REPLACE INTO notes_fts (rowid,note_id,title,content)
+      SELECT n.rowid,n.id,n.title,json_extract(j.value,'$.content')
+      FROM json_each(?) j JOIN notes n ON n.id=json_extract(j.value,'$.id')`,
+      [JSON.stringify(ids.map(id => ({ id, content: (content.get(id) ?? []).join(' ') })))]);
+  }
+  await getDb().execute('INSERT OR IGNORE INTO search_migrations (version) VALUES (2)');
 }
 
 // Serialize cell writes within each note so a slow earlier edit cannot win.
@@ -620,6 +644,7 @@ export async function restoreLibrarySnapshot(snapshot: {
   `);
   await getDb().execute('INSERT INTO library_restore_payload (payload) VALUES (?)', [JSON.stringify(snapshot)]);
   invalidateResources();
+  await migratePlainSearchText(true);
 }
 
 export async function toggleNoteFavorite(id: string): Promise<void> {
@@ -1078,7 +1103,7 @@ function updateNoteFTS(noteId: string): Promise<void> {
 }
 async function rebuildNoteIndex(noteId: string): Promise<void> {
   const cells = await getCellsByNote(noteId);
-  const content = cells.map(cell => cell.data).join('\n').replace(/notch-resource:\/\/[\w-]+/g, ' ');
+  const content = cells.map(cellText).join(' ');
   // A stable rowid plus one replacement statement prevents duplicate entries.
   await getDb().execute(`INSERT OR REPLACE INTO notes_fts (rowid,note_id,title,content)
     SELECT rowid,id,title,? FROM notes WHERE id=?`, [content, noteId]);
@@ -1091,7 +1116,15 @@ export interface SearchOptions {
   offset?: number;
 }
 
+export interface SearchSummary { id: string; notebookId: string; title: string; excerpt: string }
+
+export async function searchNoteSummaries(query: string, options: SearchOptions = {}): Promise<SearchSummary[]> {
+  return searchRows<SearchSummary>(query, options, true);
+}
 export async function searchNotes(query: string, options: SearchOptions = {}): Promise<Note[]> {
+  return hydrateNoteRows(await searchRows<NoteRow>(query, options));
+}
+async function searchRows<T>(query: string, options: SearchOptions, summaries = false): Promise<T[]> {
   await flushSearchIndex();
   if (!query.trim()) return [];
 
@@ -1111,10 +1144,9 @@ export async function searchNotes(query: string, options: SearchOptions = {}): P
   if (!options.includeTrash) filters.push('n.is_trashed = 0');
   if (options.notebookId) { filters.push('n.notebook_id = ?'); values.push(options.notebookId); }
   values.push(limit, offset);
-  let rows: NoteRow[];
   try {
-    rows = await getDb().select<NoteRow[]>(
-      `SELECT n.*
+    return await getDb().select<T[]>(
+      `SELECT ${summaries ? "n.id, n.notebook_id AS notebookId, n.title, substr(snippet(notes_fts, 2, '', '', '…', 24), 1, 1024) AS excerpt" : 'n.*'}
        FROM notes_fts
        JOIN notes n ON n.id = notes_fts.note_id
        WHERE ${filters.join(' AND ')}
@@ -1128,7 +1160,6 @@ export async function searchNotes(query: string, options: SearchOptions = {}): P
     return [];
   }
 
-  return hydrateNoteRows(rows);
 }
 
 // ==================== LINK REWRITING ====================

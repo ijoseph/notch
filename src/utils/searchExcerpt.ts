@@ -20,7 +20,7 @@ function decodeEntity(entity: string, name: string): string {
     : '\uFFFD';
 }
 
-function cellText(cell: Pick<Cell, 'type' | 'data'>): string {
+export function cellText(cell: Pick<Cell, 'type' | 'data'>): string {
   let text = cell.data;
   if (cell.type === 'text') {
     text = text

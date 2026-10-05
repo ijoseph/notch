@@ -1361,7 +1361,7 @@ body {
 /* Code Cell */
 .cell-code {
   width: 100%;
-  background: #1e1e1e;
+  background: var(--code-background, #1e1e1e);
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--border-color);
@@ -1374,7 +1374,7 @@ body {
   /* One line: EDITOR_LINE_HEIGHT (21) + HORIZONTAL_SCROLLBAR_RESERVE (8) in CodeCell.tsx.
      The inline height from JS drives the real size; this is just a floor. */
   min-height: 29px;
-  background: #1e1e1e;
+  background: var(--code-background, #1e1e1e);
 }
 
 /* Monaco overrides for cleaner look */
@@ -1385,16 +1385,16 @@ body {
 .monaco-container .monaco-editor,
 .monaco-container .monaco-editor-background,
 .monaco-container .monaco-editor .overflow-guard {
-  background: #1e1e1e !important;
+  background: var(--code-background, #1e1e1e) !important;
 }
 
 .monaco-container .monaco-editor .margin {
   background: linear-gradient(
     to right,
-    #2a2a2a 0,
-    #2a2a2a calc(100% - 12px),
-    #1e1e1e calc(100% - 12px),
-    #1e1e1e 100%
+    var(--code-gutter, #2a2a2a) 0,
+    var(--code-gutter, #2a2a2a) calc(100% - 12px),
+    var(--code-background, #1e1e1e) calc(100% - 12px),
+    var(--code-background, #1e1e1e) 100%
   ) !important;
 }
 
@@ -1405,13 +1405,13 @@ body {
 
 .monaco-container .monaco-editor .line-numbers {
   background: transparent !important;
-  color: #c7c7c7 !important;
+  color: var(--code-number, #c7c7c7) !important;
   /* Center the digit within the line-number column (Monaco right-aligns by default) */
   text-align: center !important;
 }
 
 .monaco-container .monaco-editor .current-line-number {
-  color: #ffffff !important;
+  color: var(--code-active-number, #ffffff) !important;
 }
 
 /* Markdown Preview */
@@ -2135,3 +2135,18 @@ body {
   .print-content { max-width: none; padding: 0; }
   .print-content img, .print-content .latex-cell, .print-content .diagram-preview { break-inside: avoid; }
 }
+
+.note-find-match { background: #ffbf4780; border-bottom: 2px solid #ffbf47; }
+.code-key-status:empty { display: none; }
+.code-key-status { font-family: var(--font-mono); font-size: 11px; padding: 3px 10px; color: var(--text-secondary); }
+.note-window { display: flex; height: 100vh; }
+.note-window > .editor { flex: 1; min-width: 0; }
+.note-window .editor-footer button[title^="Back"], .note-window .editor-footer button[title^="Forward"], .note-window .editor-footer button[title^="Toggle Assistant"] { display: none; }
+.presentation-view .print-content { max-width: 980px; margin: auto; padding: 60px; font-size: 22px; line-height: 1.7; }
+.presentation-view .print-content h1 { font-size: 42px; text-align: center; margin-bottom: 48px; }
+.presentation-view .preview-window-toolbar { position: sticky; top: 0; z-index: 10; }
+.exporting-image, .exporting-image body, .exporting-image #root, .exporting-image .standalone-preview { height: auto; overflow: visible; background: white; }
+.exporting-image .preview-window-toolbar, .exporting-image [role="alert"] { display: none; }
+
+.cell-code:has([data-code-theme="vs"]) { --code-background: #fff; --code-gutter: #f3f3f3; --code-number: #666; --code-active-number: #111; }
+.cell-code:has([data-code-theme="hc-black"]) { --code-background: #000; --code-gutter: #000; --code-number: #fff; --code-active-number: #fff; }

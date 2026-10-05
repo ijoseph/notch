@@ -1,0 +1,169 @@
+bun test v1.3.1 (89fa0f34)
+
+src/utils/searchExcerpt.test.ts:
+(pass) search result excerpts > centers and highlights a literal hyphenated term in later cell content [0.45ms]
+(pass) search result excerpts > shows a code match after a long earlier Markdown cell [0.01ms]
+(pass) search result excerpts > finds individual case-insensitive prefix terms in an OR query
+(pass) search result excerpts > centers the actual word prefix rather than an earlier substring [0.13ms]
+(pass) search result excerpts > rich text removes markup but preserves paragraph boundaries and decodes entities [0.07ms]
+(pass) search result excerpts > keeps code comparisons and HTML-like code as literal text pieces [0.09ms]
+(pass) search result excerpts > uses the start of the body for title-only matches and excludes resource IDs
+
+src/utils/nativeActions.test.ts:
+(pass) native menu actions > dismisses popovers before opening a native dialog and preserves arguments and results [0.10ms]
+(pass) native menu actions > keeps failures observable after dismissing the menu
+
+src/utils/notebooks.test.ts:
+(pass) isDescendantOf > direct child is a descendant
+(pass) isDescendantOf > deep descendant is found through the chain
+(pass) isDescendantOf > unrelated notebook is not a descendant
+(pass) isDescendantOf > sibling is not a descendant
+(pass) isDescendantOf > a notebook is not its own descendant
+(pass) isDescendantOf > unknown id returns false
+(pass) getNotebookSubtreeIds > includes the notebook itself
+(pass) getNotebookSubtreeIds > collects all transitive descendants
+(pass) getNotebookSubtreeIds > collects a partial subtree from a mid-level node
+(pass) getNotebookSubtreeIds > an unknown id yields just that id
+
+src/services/performance.integration.test.ts:
+(pass) performance bounds preserve search, resource and preview correctness [317.68ms]
+
+src/services/searchNotes.test.ts:
+(pass) searchNotes > returns an empty array for a blank query without hitting the db
+(pass) searchNotes > returns all matches when no options are given
+(pass) searchNotes > filters to a single notebook when notebookId is given
+(pass) searchNotes > excludes trashed notes by default
+(pass) searchNotes > includes trashed notes when includeTrash is true
+(pass) searchNotes > caps the result set at the given limit
+(pass) searchNotes > applies notebook, trash, and limit filters together [0.49ms]
+
+src/services/previewContent.test.ts:
+(pass) preview patches omit unchanged image data and preserve reordered cells [0.10ms]
+(pass) preview handles deletion, structural undo, empty notes and switching notes [0.15ms]
+
+src/services/markdown.test.ts:
+(pass) renders width-only size suffix `=300x` [1.34ms]
+(pass) renders width and height `=300x200`
+(pass) renders height-only size suffix `=x200` [0.11ms]
+(pass) preserves alt text and title alongside size [0.03ms]
+(pass) escaped `]` in alt is supported and unescaped [0.04ms]
+(pass) plain images without a size suffix are unaffected
+(pass) `=x` with no dimensions is not treated as a size suffix [0.40ms]
+
+src/services/quiverLinks.test.ts:
+(pass) rewriteQuiverLinksInText > rewrites the canonical quiver-note-url:// form [0.82ms]
+(pass) rewriteQuiverLinksInText > rewrites the bare slash form that previously crashed (issue #2)
+(pass) rewriteQuiverLinksInText > rewrites the colon-only form
+(pass) rewriteQuiverLinksInText > matches UUIDs case-insensitively
+(pass) rewriteQuiverLinksInText > rewrites every link when several appear in one string [0.06ms]
+(pass) rewriteQuiverLinksInText > leaves links whose UUID is not in the map untouched
+(pass) rewriteQuiverLinksInText > returns text unchanged when there are no quiver links [0.03ms]
+
+src/services/html.test.ts:
+(pass) sanitizeInlineStyle > drops layout styles that can escape the text cell [0.31ms]
+(pass) sanitizeInlineStyle > keeps conservative text formatting styles
+(pass) sanitizeInlineStyle > rejects unsafe or non-text color values
+(pass) sanitizeInlineStyle > removes important flags from retained declarations
+(pass) sanitizeInlineStyle > native clipboard default black inherits the editor theme while keeping formatting
+(pass) sanitizeInlineStyle > normalizes opaque black and white clipboard foregrounds in common serializations
+(pass) sanitizeInlineStyle > preserves deliberate color accents and translucent colors
+
+src/services/search.test.ts:
+(pass) searchWithinNote > finds a match and reports its offsets [0.05ms]
+(pass) searchWithinNote > is case insensitive
+(pass) searchWithinNote > finds multiple matches within one cell
+(pass) searchWithinNote > finds overlapping matches
+(pass) searchWithinNote > reports the correct cell index and skips cells with no match
+(pass) searchWithinNote > returns no results when nothing matches
+(pass) highlightMatches > wraps a match in the default highlight span
+(pass) highlightMatches > highlights every occurrence, preserving original case
+(pass) highlightMatches > accepts a custom highlight class
+(pass) highlightMatches > treats regex metacharacters in the query literally
+(pass) highlightMatches > returns the text unchanged for an empty query
+
+src/services/asyncCache.test.ts:
+(pass) editor and preview share pending renders, including repeat note visits [0.21ms]
+(pass) failed renders retry, eviction is bounded and recent entries survive [0.19ms]
+
+src/services/import.test.ts:
+(pass) importQuiverLibrary notebook nesting > preserves nesting declared in the library Meta.json hierarchy [0.58ms]
+(pass) importQuiverLibrary notebook nesting > preserves nesting declared via per-notebook meta.json children [0.72ms]
+(pass) importQuiverLibrary notebook nesting > imports flat notebooks with no parent [0.07ms]
+(pass) importQuiverLibrary notebook nesting > surfaces unreadable notebook metadata instead of claiming zero-result success [0.05ms]
+(pass) importQuiverLibrary notebook nesting > preserves usable notebooks and reports a partial metadata failure
+(pass) importQuiverLibrary notebook nesting > does not create or count a notebook whose contents cannot be listed
+(pass) importQuiverLibrary notebook nesting > reports invalid selections and unreadable root paths [0.45ms]
+(pass) importQuiverLibrary notebook nesting > rejects malformed and cyclic notebook metadata without partial hierarchy creation [0.10ms]
+
+src/services/database.integration.test.ts:
+(pass) SQLite recovery, duplication, persisted navigation and atomic backup restoration [143.41ms]
+
+src/services/export.test.ts:
+(pass) exportNoteToMarkdown > renders the title as an H1 [0.06ms]
+(pass) exportNoteToMarkdown > renders tags with a hash prefix only when present [0.03ms]
+(pass) exportNoteToMarkdown > wraps code cells in a fence carrying the language [0.01ms]
+(pass) exportNoteToMarkdown > wraps latex cells in $$ delimiters
+(pass) exportNoteToMarkdown > exports diagram cells as mermaid fences
+(pass) exportNoteToMarkdown > emits text and markdown cells verbatim [0.02ms]
+(pass) exportNoteToJSON > produces a versioned, round-trippable payload
+(pass) exportNoteToJSON > omits internal fields like id and notebookId
+
+src/services/links.test.ts:
+(pass) parseStandaloneUrl > accepts http and https URLs, including surrounding whitespace
+(pass) parseStandaloneUrl > prefixes www. URLs with https://
+(pass) parseStandaloneUrl > accepts mailto, tel, and internal note links
+(pass) parseStandaloneUrl > rejects schemes that should not become links
+(pass) parseStandaloneUrl > rejects text that contains more than one token
+(pass) htmlContainsAnchor > detects an anchor with href in a clipboard HTML fragment
+(pass) htmlContainsAnchor > ignores anchors without href and empty html
+(pass) linkifyPlainText > wraps URLs inside surrounding text and keeps trailing punctuation outside
+(pass) linkifyPlainText > keeps balanced parentheses that belong to the URL
+(pass) linkifyPlainText > strips an unmatched closing paren after the URL
+(pass) linkifyPlainText > escapes HTML in non-URL text and converts newlines
+(pass) linkifyPlainText > returns null when there is nothing to link
+(pass) decideTextCellPaste > turns a pasted URL into a hyperlink
+(pass) decideTextCellPaste > applies a pasted URL to the current selection
+(pass) decideTextCellPaste > applies a URL to the selection even when clipboard HTML already has an anchor
+(pass) decideTextCellPaste > keeps existing HTML when the clipboard already contains a link
+(pass) decideTextCellPaste > linkifies a bare URL even if HTML is a non-anchor wrapper
+(pass) decideTextCellPaste > linkifies URLs inside a larger plain-text paste [0.50ms]
+(pass) decideTextCellPaste > falls back to insertText when there is no URL and no HTML
+
+src/services/diagramSource.test.ts:
+(pass) preserves existing Mermaid exactly
+(pass) converts Quiver tutorial sequence arrows and title without changing saved source [0.33ms]
+(pass) converts tutorial flowchart topology, multiline labels, branches and legacy links [0.14ms]
+(pass) unknown legacy constructs give an actionable error instead of partial output
+
+src/services/quiverParity.test.ts:
+(pass) find reveals stable source offsets in a late code cell independently of its viewport [0.51ms]
+(pass) find handles literal punctuation and Unicode without shifting source offsets [0.07ms]
+(pass) whole-note plain text omits rich text markup and code-only excludes all other cells [0.09ms]
+(pass) code preferences validate stored values and preserve explicit false choices
+(pass) plain text preserves code indentation and paragraph boundaries while removing Markdown formatting [0.51ms]
+(pass) cross-window reconciliation updates changed notes without replacing unrelated local state
+
+src/services/backup.test.ts:
+(pass) complete backup round trip retains trash, hierarchy, cell IDs and image bytes [0.15ms]
+(pass) old incomplete backups are explicitly rejected
+(pass) missing resource bytes fail validation before restore [0.40ms]
+(pass) missing parent, cycles, and duplicate IDs cannot be restored [0.09ms]
+(pass) invalid resource encoding and cross-note resources are rejected [0.04ms]
+(pass) invalid cell types and tag references are rejected [0.01ms]
+
+src/services/markdownHighlight.test.ts:
+(pass) leaves intraword underscores unhighlighted [2.55ms]
+(pass) does not carry bad underscore emphasis across lines
+(pass) still highlights valid underscore emphasis and strong text [0.08ms]
+(pass) does not highlight underscore emphasis with bad word boundaries [0.44ms]
+
+src/components/Editor/formatting.test.ts:
+(pass) bold wraps the selected text and keeps the interior selected
+(pass) empty inline formatting places the caret between the markers
+(pass) list formatting uses complete selected lines without changing the next line
+(pass) heading inserted in the middle of a line preserves the caret location
+
+ 123 pass
+ 0 fail
+ 251 expect() calls
+Ran 123 tests across 20 files. [750.00ms]

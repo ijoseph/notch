@@ -1,0 +1,11 @@
+        Info Looking up installed tauri packages to check mismatched versions...
+     Running beforeBuildCommand `bun run build:frontend`
+$ bun run scripts/build-frontend.ts
+Built 78 assets; index.html loads main-wb4gk5p5.js. Monaco is bundled locally.
+   Compiling notch v0.3.1 (/Users/samb/dev/notch/src-tauri)
+    Finished `release` profile [optimized] target(s) in 1m 04s
+       Built application at: /Users/samb/dev/notch/src-tauri/target/release/notch
+    Bundling Notch QA.app (/Users/samb/dev/notch/src-tauri/target/release/bundle/macos/Notch QA.app)
+    Finished 1 bundle at:
+        /Users/samb/dev/notch/src-tauri/target/release/bundle/macos/Notch QA.app
+

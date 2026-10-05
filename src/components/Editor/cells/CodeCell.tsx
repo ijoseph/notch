@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { loader } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
-import './monaco';
+import { loadKeyBinding } from './monaco';
+import { useCodePreferences } from '../../../store/codePreferences';
 import { toMonacoLanguage } from '../codeLanguages';
 
 interface CodeCellProps {
@@ -72,6 +73,8 @@ export default function CodeCell({
   onNavigatePrev,
   onNavigateNext,
 }: CodeCellProps) {
+  const preferences = useCodePreferences(state => state.preferences);
+  const statusRef = useRef<HTMLDivElement>(null);
   const [editorHeight, setEditorHeight] = useState(MIN_EDITOR_HEIGHT);
   const [editorReady, setEditorReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -131,6 +134,20 @@ export default function CodeCell({
       // until a native window resize, even when the outer container is correct.
       const editor = monaco.editor.create(container, { ...EDITOR_OPTIONS, model, dimension: { width, height } });
       editorRef.current = editor;
+      const decorations = editor.createDecorationsCollection();
+      const find = (event: Event) => {
+        const match = (event as CustomEvent<{ start: number; end: number } | null>).detail;
+        if (!match) { decorations.clear(); return; }
+        const start = model!.getPositionAt(match.start), end = model!.getPositionAt(match.end);
+        decorations.set([{ range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column), options: { inlineClassName: 'note-find-match' } }]);
+        const scroller = container.closest<HTMLElement>('.editor-content');
+        if (scroller) scroller.scrollTop += container.getBoundingClientRect().top - scroller.getBoundingClientRect().top + editor.getTopForLineNumber(start.lineNumber) - scroller.clientHeight / 2;
+        editor.revealRangeInCenterIfOutsideViewport(new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column));
+        editor.render(true);
+      };
+      container.addEventListener('notch-find', find);
+      subscriptions.push({ dispose: () => { container.removeEventListener('notch-find', find); decorations.clear(); } });
+      container.closest('[data-cell-id]')?.dispatchEvent(new Event('notch-editor-ready'));
       const readSelection = (event: Event) => {
         const detail = (event as CustomEvent<{ offset?: number }>).detail;
         const position = editor.getPosition();
@@ -140,6 +157,14 @@ export default function CodeCell({
       subscriptions.push({ dispose: () => container.removeEventListener('notch-read-selection', readSelection) });
 
       subscriptions.push(
+        editor.onDidChangeCursorPosition(event => {
+          if (!editor.hasTextFocus()) return;
+          const scroller = container.closest<HTMLElement>('.editor-content');
+          if (!scroller) return;
+          const y = container.getBoundingClientRect().top - scroller.getBoundingClientRect().top + editor.getTopForLineNumber(event.position.lineNumber) - editor.getScrollTop();
+          if (y < 8) scroller.scrollTop += y - 8;
+          else if (y + EDITOR_LINE_HEIGHT > scroller.clientHeight - 8) scroller.scrollTop += y + EDITOR_LINE_HEIGHT - scroller.clientHeight + 8;
+        }),
         editor.onDidContentSizeChange(() => syncEditorHeight(editor)),
         editor.onDidFocusEditorText(() => latest.current.onFocus()),
         editor.onDidChangeModelContent(() => {
@@ -210,8 +235,36 @@ export default function CodeCell({
     };
   }, [layoutEditor, syncEditorHeight]);
 
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    monacoRef.current?.editor.setTheme(preferences.theme);
+    editor.updateOptions({ lineNumbers: preferences.lineNumbers ? 'on' : 'off', renderWhitespace: preferences.invisibles ? 'all' : 'none', guides: { indentation: preferences.indentGuides } });
+    editor.getModel()?.updateOptions({ tabSize: preferences.tabSize, insertSpaces: preferences.softTabs });
+  }, [preferences, editorReady]);
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    let disposed = false;
+    let binding: { dispose(): void } | undefined;
+    const attach = async () => {
+      if (preferences.keyBinding === 'vim') {
+        const { initVimMode } = await loadKeyBinding('vim');
+        if (!disposed) binding = initVimMode(editor, statusRef.current!);
+      } else if (preferences.keyBinding === 'emacs') {
+        const { EmacsExtension } = await loadKeyBinding('emacs');
+        if (!disposed) { const mode = new EmacsExtension(editor); mode.start(); binding = mode; }
+      }
+    };
+    void attach().catch(error => console.warn('Keyboard binding failed', error));
+    return () => { disposed = true; binding?.dispose(); if (statusRef.current) statusRef.current.textContent = ''; };
+  }, [preferences.keyBinding, editorReady]);
+
   useLayoutEffect(() => {
-    if (editorReady) layoutEditor();
+    if (editorReady) {
+      layoutEditor();
+      containerRef.current?.closest('[data-cell-id]')?.dispatchEvent(new Event('notch-editor-ready'));
+    }
   }, [editorReady, editorHeight, layoutEditor]);
 
   useLayoutEffect(() => {
@@ -239,14 +292,15 @@ export default function CodeCell({
   }, [language, editorReady]);
 
   useLayoutEffect(() => {
-    if (isFocused) {
+    if (isFocused && !document.activeElement?.closest('.find-bar')) {
       if (editorRef.current) editorRef.current.focus();
       else pendingInputRef.current?.focus();
     }
   }, [isFocused, focusRequest]);
 
   return (
-    <div className="code-cell-wrapper" style={{ position: 'relative' }}>
+    <div data-code-theme={preferences.theme} className="code-cell-wrapper" style={{ position: 'relative' }}>
+      <div ref={statusRef} className="code-key-status" aria-live="polite" />
       <div ref={containerRef} className="monaco-container" style={{ height: editorHeight + 'px' }} />
       {!editorReady && (
         <textarea

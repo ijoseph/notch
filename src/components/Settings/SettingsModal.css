@@ -52,3 +52,8 @@
   color: var(--text-tertiary);
   padding: 12px 14px 0;
 }
+
+.code-settings { padding: 0 14px 14px; border-bottom: 1px solid var(--border-color); }
+.code-settings .settings-section-title { padding-left: 0; margin-bottom: 12px; }
+.code-settings label { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; }
+.code-settings select { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 5px; }

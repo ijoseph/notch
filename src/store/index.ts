@@ -40,6 +40,7 @@ function rememberCellChange(change: CellChange): void {
 const pendingCellInsertions = new Map<string, Promise<unknown>>();
 const noteBodyLoadPromises = new Map<string, Promise<void>>();
 let currentLibraryPath: string | null = null;
+export const libraryPath = () => currentLibraryPath;
 
 export async function flushPendingChanges(): Promise<void> {
   await Promise.all([...pendingCellInsertions.values()]);
@@ -545,7 +546,7 @@ useStore.subscribe((state, previous) => {
       useStore.setState({ navigationHistory: history, navigationIndex: history.length - 1, lastChangeWasStructural: false });
     }
   }
-  if (currentLibraryPath && preferencesChanged(state, previous)) savePreferences(currentLibraryPath, state);
+  if (currentLibraryPath && !(typeof location !== 'undefined' && new URLSearchParams(location.search).has('note')) && preferencesChanged(state, previous)) savePreferences(currentLibraryPath, state);
 });
 
 // Selector hooks for common state slices

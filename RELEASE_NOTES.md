@@ -1,45 +1,37 @@
-# Notch 0.3.1
+# Notch 0.4.0
 
-This release fixes editing regressions and makes live previews more responsive. It also includes the native editing, recovery, and Quiver compatibility improvements from the unpublished 0.3.0 draft.
-
-## New in 0.3.1
-
-- Fix immediate typing or paste after Shift+Return landing in the previous code cell. New inputs are available immediately, with ordered background persistence.
-- Restore native Undo and Redo for Markdown toolbar formatting.
-- Keep small flowcharts at their natural size instead of enlarging them across multiple screens.
-- Hide the empty text-cell editing prompt from read-only previews.
-- Update only changed preview cells, reuse diagram renders, and avoid unnecessary code-editor layouts on each keystroke.
-- In a controlled preview benchmark with 20 code cells, median update work fell from about 5 ms to 0.2–0.3 ms. This measures preview rendering, not total application latency or performance relative to Quiver.
-- Add a local-build command that skips updater artifacts.
-
-## Also included since 0.2.1
+This release adds more Quiver-style editing and viewing workflows, improves search responsiveness for large notes, and fixes navigation and preview polish.
 
 ## Editing and navigation
 
-- Fix code cells appearing blank until the window is resized. Monaco now initializes at the correct size and draws without waiting for background animation frames.
-- Fix new-cell focus with Shift+Return, title-to-body navigation with Return, and multiline code-cell sizing.
-- Keep pasted rich text legible in dark mode and insert images directly at the rich-text caret.
-- Make Markdown formatting controls work and hide unsupported formatting actions for math and diagram cells.
-- Preserve library-specific view, collection, and note selection across restarts. Select notes in the displayed sort order and select newly created notebooks immediately.
-- Show and highlight matching text in search excerpts, including matches in later code cells.
+- Split cells at the cursor, cut/copy/paste whole cells, and undo or redo structural cell changes.
+- Navigate Back and Forward between notes.
+- Open notes in independent editable windows, with changes synchronized between windows in the same library. Closing a window or quitting waits for pending edits to save.
+- Find text reliably across cell types, scroll matches into view, and wrap through results with Return and Shift+Return. Finding text from preview-only mode opens the editor.
+- Customize code themes, tab size, line numbers, whitespace, indentation guides, and soft tabs. Choose Standard, Vim, or Emacs keybindings, loaded locally.
+- Keep the surrounding note scrolled to the code caret during keyboard navigation.
 
-## Import, backup, and recovery
+## Preview, presentation, and export
 
-- Fix native Quiver library imports that could report success with zero imported notes. Read the selected package recursively and report failed items clearly.
-- Render supported legacy Quiver sequence diagrams and flowcharts while preserving their original source. Improve diagram contrast and clean up rendering errors.
-- Add native and context-menu actions to duplicate notes, move them to Trash, and restore them. Duplicated notes retain independent image resources.
-- Preserve notes, tags, and resources when deleting a notebook subtree by moving its notes to Trash, including notes already trashed.
-- Export complete version 2 library backups, including Trash and resource bytes, and restore them atomically into a new empty library. Invalid or incomplete older backups are rejected with an explanation.
+- Open floating live previews and optionally synchronize editor and preview scrolling.
+- Present a note in a dedicated full-screen view, with Escape to return.
+- Export PDF, plain text, and PNG. PNG captures rendered math, diagrams, and images through the native macOS renderer.
+- Copy an entire note as HTML source, Markdown, plain text, or code only.
+- Preserve paragraphs and code indentation in plain-text output, with readable labels for images.
+- Reset floating-preview scroll position when switching notes while preserving it during edits.
 
-## Polish and packaging
+## Performance and polish
 
-- Fix Settings overflow, Escape dismissal, and focus handling.
-- Keep editor controls accessible alongside the assistant; adapt narrow split panes and dismiss transient menus consistently.
-- Remove the repeated title in split preview.
-- Fix the production application entry and bundle Monaco locally, avoiding its CDN dependency.
+- Fetch compact search summaries instead of loading full matching note bodies. Search indexing strips rich-text markup while preserving code and readable text.
+- Keep the selected search result visible during keyboard navigation and improve search accessibility.
+- Reuse preview rendering and resource reads, and avoid redundant work when no detached editor is open.
+- Bound the image-resource cache and evict inactive notes while protecting resources used by editors, previews, and exports.
+- Fix light code themes retaining a dark background and improve Find highlights without altering editable content.
+
+In a synthetic search fixture of 50 large notes, result loading dropped from roughly 57 MB of note bodies to about 14 KB of summaries. Median JavaScript excerpt formatting fell from 202 ms to 0.27 ms; more work now happens in SQLite. These are component measurements, not total application latency or a measured speed comparison with Quiver.
 
 ## Verification and known limits
 
-113 automated tests pass, including SQLite recovery, backup round trips, rapid insertion persistence, and render-cache behavior. Native retesting verified all four 0.3.1 fixes in an optimized macOS package. Native macOS testing verified code editing and Undo/Redo, note duplication and recovery, inline images, settings, responsive layout, search, all 12 Quiver tutorial imports, and a backup restoration of 18 notes with 17 byte-identical resources.
+123 automated tests pass. Type checking, the native Rust check, and an optimized macOS QA build passed. Native testing covered search navigation, Find wrapping and scrolling, detached-window editing and synchronization, save-on-quit, presentation mode, floating previews, PNG and plain-text export, code themes, and Vim/Emacs settings. Detailed evidence is in the round 6 performance and round 7 feature QA reports.
 
-This release does not provide complete Quiver feature parity. Floating previews, presentation mode, arbitrary attachments, additional export formats such as PDF/PNG, and shared file-based synchronization remain separate work. Complex legacy diagram syntax outside the supported subset displays an explanatory error. Signed-release installation, updater installation, and enabled assistant conversations were not part of the native fix verification.
+PNG export is macOS-only and limits captures to 24 million logical pixels or 30,000 points in height; larger notes can use PDF. Arbitrary attachments and shared file-based synchronization remain gaps relative to Quiver. Signed-release installation and updater installation were not tested in this round.

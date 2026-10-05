@@ -30,3 +30,7 @@ if (!html.includes(basename(entries[0]!.path)) || !await Bun.file(entries[0]!.pa
   throw new Error('App entry missing from generated HTML');
 }
 console.log(`Built ${result.outputs.length} assets; index.html loads ${basename(entries[0]!.path)}. Monaco is bundled locally.`);
+
+await mkdir(`${outdir}/bindings`, { recursive: true });
+await cp('node_modules/monaco-vim/dist/monaco-vim.umd.js', `${outdir}/bindings/vim.js`);
+await cp('node_modules/monaco-emacs/dist/monaco-emacs.js', `${outdir}/bindings/emacs.js`);

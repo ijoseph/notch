@@ -81,25 +81,91 @@ async fn select_quiver_library(app: tauri::AppHandle) -> Result<Option<String>, 
 }
 
 #[tauri::command]
-async fn open_preview(app: tauri::AppHandle, printing: bool) -> Result<(), String> {
-    let label = if printing { "pdf-preview" } else { "floating-preview" };
-    if let Some(window) = app.get_webview_window(label) {
+fn note_window_labels(app: tauri::AppHandle) -> Vec<String> {
+    app.webview_windows().keys().filter(|label| label.starts_with("note-") && !label.ends_with("-preview")).cloned().collect()
+}
+
+#[tauri::command]
+async fn open_note_window(app: tauri::AppHandle, note_id: String, database_path: String) -> Result<(), String> {
+    use std::hash::{Hash, Hasher};
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    (&database_path, &note_id).hash(&mut hash);
+    let label = format!("note-{:x}", hash.finish());
+    if let Some(window) = app.get_webview_window(&label) {
+        window.unminimize().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    let query = tauri::Url::parse_with_params("https://localhost/", &[("note", note_id.as_str()), ("db", database_path.as_str())]).map_err(|e| e.to_string())?;
+    tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App(format!("index.html?{}", query.query().unwrap()).into()))
+        .title("Note").inner_size(980.0, 760.0).min_inner_size(540.0, 360.0).build().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_preview(app: tauri::AppHandle, window: tauri::WebviewWindow, mode: String) -> Result<(), String> {
+    if !["floating", "pdf", "presentation", "image"].contains(&mode.as_str()) { return Err("Unknown preview mode".into()); }
+    let owner = window.label();
+    let label = format!("{}{}-preview", if owner == "main" { String::new() } else { format!("{owner}-") }, mode);
+    if let Some(window) = app.get_webview_window(&label) {
         window.unminimize().map_err(|e| e.to_string())?;
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
         return Ok(());
     }
-    tauri::WebviewWindowBuilder::new(&app, label,
-        tauri::WebviewUrl::App(format!("index.html?preview={label}").into()))
-        .title(if printing { "PDF Preview" } else { "Floating Preview" })
-        .inner_size(720.0, 760.0).min_inner_size(360.0, 300.0)
-        .always_on_top(!printing).build().map_err(|e| e.to_string())?;
+    tauri::WebviewWindowBuilder::new(&app, &label,
+        tauri::WebviewUrl::App(format!("index.html?preview={label}&owner={owner}").into()))
+        .title(match mode.as_str() { "pdf" => "PDF Preview", "image" => "Image Preview", "presentation" => "Presentation", _ => "Floating Preview" })
+        .inner_size(800.0, 760.0).min_inner_size(360.0, 300.0)
+        .fullscreen(mode == "presentation").always_on_top(mode == "floating").build().map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
+fn close_preview(window: tauri::WebviewWindow) -> Result<(), String> {
+    if !window.label().ends_with("-preview") { return Err("Not a preview window".into()); }
+    window.close().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn export_preview_png(window: tauri::WebviewWindow, width: f64, height: f64, title: String) -> Result<(), String> {
+    if !window.label().ends_with("image-preview") { return Err("Open an image preview first".into()); }
+    if !width.is_finite() || !height.is_finite() || width < 1.0 || height < 1.0 || width * height > 24_000_000.0 || height > 30000.0 {
+        return Err("This note is too large for one image. Export it as PDF instead.".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let (send, receive) = tokio::sync::oneshot::channel::<Result<Vec<u8>, String>>();
+        let send = Mutex::new(Some(send));
+        window.with_webview(move |webview| unsafe {
+            let view: &objc2_web_kit::WKWebView = &*webview.inner().cast();
+            let config = objc2_web_kit::WKSnapshotConfiguration::new(objc2::MainThreadMarker::new().unwrap());
+            config.setRect(objc2_foundation::NSRect::new(objc2_foundation::NSPoint::new(0.0, 0.0), objc2_foundation::NSSize::new(width, height)));
+            config.setSnapshotWidth(Some(&objc2_foundation::NSNumber::new_f64(width)));
+            let callback = block2::RcBlock::new(move |image: *mut objc2_app_kit::NSImage, error: *mut objc2_foundation::NSError| {
+                let result = if let Some(image) = image.as_ref() {
+                    image.TIFFRepresentation().and_then(|data| objc2_app_kit::NSBitmapImageRep::imageRepWithData(&data))
+                        .and_then(|rep| rep.representationUsingType_properties(objc2_app_kit::NSBitmapImageFileType::PNG, &objc2_foundation::NSDictionary::new()))
+                        .map(|data| data.to_vec()).ok_or_else(|| "Could not encode image".to_string())
+                } else { Err(error.as_ref().map(|e| e.localizedDescription().to_string()).unwrap_or_else(|| "Could not capture note".into())) };
+                if let Some(send) = send.lock().unwrap().take() { let _ = send.send(result); }
+            });
+            view.takeSnapshotWithConfiguration_completionHandler(Some(&config), &callback);
+        }).map_err(|e| e.to_string())?;
+        let png = receive.await.map_err(|e| e.to_string())??;
+        let app = window.app_handle().clone();
+        let filename: String = title.chars().map(|c| if c == '/' || c == ':' { '_' } else { c }).collect();
+        let path = tauri::async_runtime::spawn_blocking(move || app.dialog().file().set_title("Export PNG").set_file_name(format!("{filename}.png")).add_filter("PNG Image", &["png"]).blocking_save_file()).await.map_err(|e| e.to_string())?;
+        if let Some(path) = path { fs::write(path.into_path().map_err(|e| e.to_string())?, png).map_err(|e| e.to_string())?; }
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = title; Err("PNG export is currently available on macOS. Use PDF on this platform.".into()) }
+}
+
+#[tauri::command]
 fn print_preview(window: tauri::WebviewWindow) -> Result<(), String> {
-    if window.label() != "pdf-preview" && window.label() != "floating-preview" {
+    if !window.label().ends_with("pdf-preview") && !window.label().ends_with("floating-preview") {
         return Err("Printing is only available from a note preview".into());
     }
     #[cfg(target_os = "macos")]
@@ -146,6 +212,10 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![
             open_preview,
+            open_note_window,
+            note_window_labels,
+            close_preview,
+            export_preview_png,
             print_preview,
             prepare_exit_listener,
             complete_exit,
@@ -177,13 +247,30 @@ fn main() {
                         let _ = window.emit("notch-request-exit", ());
                     }
                 }
+            } else if window.label().starts_with("note-") && !window.label().ends_with("-preview") {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close(); let _ = window.emit("notch-close-note", ());
+                }
             } else if matches!(event, tauri::WindowEvent::Destroyed) {
-                let _ = window.app_handle().emit_to("main", "preview-closed", window.label());
+                let _ = window.app_handle().emit("preview-closed", window.label());
             }
         })
         .on_menu_event(|app, event| {
-            let Some(window) = app.get_webview_window("main") else { return; };
+            let Some(main) = app.get_webview_window("main") else { return; };
+            let focused = app.webview_windows().into_values().find(|w| w.is_focused().unwrap_or(false));
+            let mut window = focused.filter(|w| w.label().starts_with("note-") && !w.label().ends_with("-preview")).unwrap_or(main.clone());
+            let id = event.id().as_ref();
+            if window.label() != "main" && ["find_in_note", "settings", "editor_only", "preview_only", "split_view"].contains(&id) {
+                let _ = window.eval(&format!("window.dispatchEvent(new CustomEvent('notch-note-menu',{{detail:'{id}'}}))")); return;
+            }
+            if window.label() != "main" && !["open_note_window", "present_note", "export_png", "export_text", "copy_html", "copy_markdown", "copy_text", "copy_code", "floating_preview", "export_pdf", "cell_split", "cell_cut", "cell_copy", "cell_paste", "cell_up", "cell_down", "cell_delete", "cell_undo", "cell_redo", "export", "duplicate_note", "trash_note", "restore_note", "scroll_sync"].contains(&id) { window = main.clone(); }
+            if window.label() != "main" && ["export", "duplicate_note", "trash_note", "restore_note", "scroll_sync"].contains(&id) {
+                let _ = window.eval(&format!("window.dispatchEvent(new CustomEvent('notch-note-menu',{{detail:'{id}'}}))")); return;
+            }
             match event.id().as_ref() {
+                "open_note_window" | "present_note" | "export_png" | "export_text" | "copy_html" | "copy_markdown" | "copy_text" | "copy_code" => {
+                    let _ = window.eval(&format!("window.dispatchEvent(new CustomEvent('notch-note-command',{{detail:'{id}'}}))"));
+                }
                 "show_main_window" => {
                     let _ = window.unminimize();
                     let _ = window.show();
@@ -732,6 +819,15 @@ fn create_menu(handle: &tauri::AppHandle) -> Result<Menu<tauri::Wry>, tauri::Err
         &MenuItem::with_id(handle, "cell_undo", "Undo Cell Change", true, None::<&str>)?,
         &MenuItem::with_id(handle, "cell_redo", "Redo Cell Change", true, None::<&str>)?,
     ])?;
+    for (id, title) in [("open_note_window", "Open in New Window"), ("present_note", "Present Note"), ("export_png", "Export PNG…"), ("export_text", "Export Plain Text…")] {
+        note_menu.append(&MenuItem::with_id(handle, id, title, true, None::<&str>)?)?;
+    }
+    note_menu.append(&Submenu::with_items(handle, "Copy Note", true, &[
+        &MenuItem::with_id(handle, "copy_html", "As HTML Source", true, None::<&str>)?,
+        &MenuItem::with_id(handle, "copy_markdown", "As Markdown", true, None::<&str>)?,
+        &MenuItem::with_id(handle, "copy_text", "As Plain Text", true, None::<&str>)?,
+        &MenuItem::with_id(handle, "copy_code", "As Code Only", true, None::<&str>)?,
+    ])?)?;
     note_menu.append(&MenuItem::with_id(handle, "floating_preview", "Show Floating Preview", true, None::<&str>)?)?;
     note_menu.append(&MenuItem::with_id(handle, "export_pdf", "Export PDF…", true, None::<&str>)?)?;
     view_menu.append(&PredefinedMenuItem::separator(handle)?)?;

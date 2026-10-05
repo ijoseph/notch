@@ -91,6 +91,7 @@ export default function CellContainer({
   return (
     <div
       data-cell-id={cell.id}
+      style={{ position: 'relative' }}
       className={`cell cell-${cell.type} ${isFocused ? 'focused' : ''}`}
       onClick={onFocus}
     >

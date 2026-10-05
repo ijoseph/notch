@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Note } from '../../types';
-import { searchWithinNote } from '../../services/search';
+import { noteMatches, revealMatch, clearFind } from '../../services/noteFind';
+import { useStore } from '../../store';
 
 interface FindBarProps {
   note: Note;
@@ -9,7 +10,6 @@ interface FindBarProps {
 
 export default function FindBar({ note, onClose }: FindBarProps) {
   const [query, setQuery] = useState('');
-  const [matchCount, setMatchCount] = useState(0);
   const [currentMatch, setCurrentMatch] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -17,129 +17,19 @@ export default function FindBar({ note, onClose }: FindBarProps) {
     inputRef.current?.focus();
   }, []);
 
-  const highlightMatches = useCallback((q: string) => {
-    // Clear previous highlights
-    document.querySelectorAll('.find-highlight').forEach(el => {
-      const parent = el.parentNode;
-      if (parent) {
-        parent.replaceChild(document.createTextNode(el.textContent || ''), el);
-        parent.normalize();
-      }
-    });
-
-    if (!q.trim()) {
-      setMatchCount(0);
-      setCurrentMatch(0);
-      return;
-    }
-
-    const results = searchWithinNote(note, q);
-    const total = results.reduce((sum, r) => sum + r.matches.length, 0);
-    setMatchCount(total);
-    setCurrentMatch(total > 0 ? 1 : 0);
-
-    // Use the browser's built-in find to highlight (via CSS)
-    // Apply highlights to rendered content in editor (handles split mode too)
-    const editorContents = document.querySelectorAll('.editor-content');
-    if (editorContents.length === 0) return;
-
-    const textNodes: Text[] = [];
-    editorContents.forEach(editorContent => {
-      const walker = document.createTreeWalker(
-        editorContent,
-        NodeFilter.SHOW_TEXT,
-        null,
-      );
-
-      let node;
-      while ((node = walker.nextNode())) {
-        textNodes.push(node as Text);
-      }
-    });
-
-    const lowerQuery = q.toLowerCase();
-    let matchIndex = 0;
-
-    for (const textNode of textNodes) {
-      const text = textNode.textContent || '';
-      const lowerText = text.toLowerCase();
-      const indices: number[] = [];
-
-      let idx = 0;
-      while ((idx = lowerText.indexOf(lowerQuery, idx)) !== -1) {
-        indices.push(idx);
-        idx += 1;
-      }
-
-      if (indices.length === 0) continue;
-
-      const fragment = document.createDocumentFragment();
-      let lastEnd = 0;
-
-      for (const start of indices) {
-        matchIndex++;
-        if (start > lastEnd) {
-          fragment.appendChild(document.createTextNode(text.substring(lastEnd, start)));
-        }
-        const span = document.createElement('span');
-        span.className = matchIndex === 1 ? 'find-highlight find-highlight-active' : 'find-highlight';
-        span.textContent = text.substring(start, start + q.length);
-        span.dataset.matchIndex = String(matchIndex);
-        fragment.appendChild(span);
-        lastEnd = start + q.length;
-      }
-
-      if (lastEnd < text.length) {
-        fragment.appendChild(document.createTextNode(text.substring(lastEnd)));
-      }
-
-      textNode.parentNode?.replaceChild(fragment, textNode);
-    }
-
-    // Scroll first match into view
-    const firstHighlight = document.querySelector('.find-highlight-active');
-    firstHighlight?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [note]);
-
+  const mode = useStore(state => state.editorViewMode);
+  const matches = useMemo(() => noteMatches(note, query), [note, query]);
+  const selected = Math.min(currentMatch, Math.max(0, matches.length - 1));
+  useEffect(() => { setCurrentMatch(0); }, [query, note.id]);
   useEffect(() => {
-    highlightMatches(query);
-    return () => {
-      // Clean up highlights on unmount
-      document.querySelectorAll('.find-highlight').forEach(el => {
-        const parent = el.parentNode;
-        if (parent) {
-          parent.replaceChild(document.createTextNode(el.textContent || ''), el);
-          parent.normalize();
-        }
-      });
-    };
-  }, [query, highlightMatches]);
-
-  const goToMatch = (index: number) => {
-    document.querySelectorAll('.find-highlight').forEach(el => {
-      el.classList.remove('find-highlight-active');
-    });
-
-    const target = document.querySelector(`.find-highlight[data-match-index="${index}"]`);
-    if (target) {
-      target.classList.add('find-highlight-active');
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  };
-
-  const handleNext = () => {
-    if (matchCount === 0) return;
-    const next = currentMatch >= matchCount ? 1 : currentMatch + 1;
-    setCurrentMatch(next);
-    goToMatch(next);
-  };
-
-  const handlePrev = () => {
-    if (matchCount === 0) return;
-    const prev = currentMatch <= 1 ? matchCount : currentMatch - 1;
-    setCurrentMatch(prev);
-    goToMatch(prev);
-  };
+    if (mode === 'preview') { useStore.getState().setEditorViewMode('split'); return; }
+    const match = matches[selected];
+    if (!match) { clearFind(); return; }
+    return revealMatch(match);
+  }, [matches, selected, mode]);
+  const matchCount = matches.length;
+  const handleNext = () => setCurrentMatch(index => matches.length ? (index + 1) % matches.length : 0);
+  const handlePrev = () => setCurrentMatch(index => matches.length ? (index + matches.length - 1) % matches.length : 0);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -162,6 +52,7 @@ export default function FindBar({ note, onClose }: FindBarProps) {
         <input
           ref={inputRef}
           type="text"
+          autoCorrect="off" autoCapitalize="off" spellCheck={false}
           className="find-bar-input"
           placeholder="Find in note..."
           value={query}
@@ -170,7 +61,7 @@ export default function FindBar({ note, onClose }: FindBarProps) {
         />
         {query && (
           <span className="find-bar-count">
-            {matchCount > 0 ? `${currentMatch} of ${matchCount}` : 'No results'}
+            {matchCount > 0 ? `${selected + 1} of ${matchCount}` : 'No results'}
           </span>
         )}
       </div>

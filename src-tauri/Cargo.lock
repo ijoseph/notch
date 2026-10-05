@@ -2228,9 +2228,12 @@ dependencies = [
 
 [[package]]
 name = "notch"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
+ "block2",
+ "objc2",
  "objc2-app-kit",
+ "objc2-foundation",
  "objc2-web-kit",
  "serde",
  "serde_json",
@@ -2243,6 +2246,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-sql",
  "tauri-plugin-updater",
+ "tokio",
 ]
 
 [[package]]

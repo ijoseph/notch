@@ -2,10 +2,13 @@ import { Database } from 'bun:sqlite';
 import { expect, mock, spyOn } from 'bun:test';
 import hljs from 'highlight.js';
 const sql = new Database(':memory:');
-let cellRows = 0, resourceReads = 0, failResourceRead = false;
+let cellRows = 0, resourceReads = 0, failResourceRead = false, failMigration = false;
 let blockResourceRead: Promise<void> | undefined;
 mock.module('@tauri-apps/plugin-sql', () => ({ default: { load: async () => ({
-  execute: async (query: string, values: any[] = []) => sql.query(query).run(...values),
+  execute: async (query: string, values: any[] = []) => {
+    if (failMigration && query.includes('FROM json_each(?) j JOIN notes')) { failMigration = false; throw new Error('Synthetic migration failure'); }
+    return sql.query(query).run(...values);
+  },
   select: async (query: string, values: any[] = []) => {
     const rows = sql.query(query).all(...values);
     if (query.includes('SELECT * FROM cells')) cellRows += rows.length;
@@ -82,3 +85,53 @@ await renderer.render(note); expect(highlight).toHaveBeenCalledTimes(6);
 renderer.clear(); await renderer.render(note); expect(highlight).toHaveBeenCalledTimes(8);
 highlight.mockRestore();
 console.log('PASS incremental print rendering, content undo, reorder and invalidation');
+
+const rich = await db.createNote(book.id, 'Rich search');
+await db.updateCell(rich.id, rich.cells[0].id, {type:'text',data:'<p>Visible &amp; searchable <b>richneedle</b></p><script>hiddenScriptNeedle</script>'});
+await db.flushSearchIndex();
+cellRows = 0;
+const richResults = await db.searchNoteSummaries('richneedle');
+expect(richResults[0].excerpt).toContain('Visible & searchable richneedle');
+expect(richResults[0].excerpt).not.toContain('<b>');
+expect(cellRows).toBe(0);
+expect(await db.searchNoteSummaries('hiddenScriptNeedle')).toHaveLength(0);
+const late = await db.createNote(book.id, 'Late match');
+await db.updateCell(late.id, late.cells[0].id, {type:'code',data:'prefix '.repeat(200000)+' lateUniqueNeedle std::vector<int> C++'});
+await db.flushSearchIndex(); cellRows = 0;
+const lateResults = await db.searchNoteSummaries('lateUniqueNeedle');
+expect(lateResults[0].excerpt).toContain('lateUniqueNeedle');
+expect(lateResults[0].excerpt).toContain('std::vector<int>');
+expect(lateResults[0].excerpt.length).toBeLessThanOrEqual(1024); expect(cellRows).toBe(0);
+expect((await db.searchNoteSummaries('Rich search')).some(n=>n.id===rich.id)).toBe(true);
+// Simulate an old library whose index still contains markup, then upgrade it.
+sql.query('UPDATE notes_fts SET content = ? WHERE note_id = ?').run('<b>staleMarkupOnly</b>',rich.id);
+sql.query('DELETE FROM search_migrations WHERE version = 2').run();
+failMigration = true;
+await expect(db.initDatabase('sqlite:migrated-library')).rejects.toThrow('Synthetic migration failure');
+await db.initDatabase('sqlite:migrated-library');
+expect((await db.searchNoteSummaries('richneedle'))[0].excerpt).not.toContain('<b>');
+expect(await db.searchNoteSummaries('staleMarkupOnly')).toHaveLength(0);
+console.log('PASS compact excerpts, late/code/title matches and old-index migration');
+
+const active = await db.createResource('n001','active.png','image/png',Buffer.alloc(2*1024*1024).toString('base64'));
+const releaseActive = resources.retainResourcesForNote('n001');
+await resources.loadResourcesForNote('n001');
+const retainedIds:string[]=[];
+for(let i=0;i<25;i++) {
+ const id=`n${String(i+2).padStart(3,'0')}`;
+ const r=await db.createResource(id,'budget.png','image/png',Buffer.alloc(2*1024*1024,i).toString('base64'));
+ retainedIds.push(r.id); await resources.loadResourcesForNote(id);
+}
+expect(resources.resourceCacheStats().estimatedBytes).toBeLessThanOrEqual(resources.resourceCacheStats().budget);
+expect(resources.getResourceDataUrl(active.id)).toBeDefined();
+expect(resources.getResourceDataUrl(retainedIds[0])).toBeUndefined();
+const readsBeforeReload=resourceReads;
+await resources.loadResourcesForNote('n002');
+expect(resourceReads).toBe(readsBeforeReload+1); expect(resources.getResourceDataUrl(retainedIds[0])).toBeDefined();
+// Active oversized notes are allowed over budget and are evicted upon release.
+const releaseHuge = resources.retainResourcesForNote('n050');
+const huge=await db.createResource('n050','huge.png','image/png','A'.repeat(34*1024*1024));
+await resources.loadResourcesForNote('n050'); expect(resources.getResourceDataUrl(huge.id)).toBeDefined();
+releaseHuge(); releaseActive();
+expect(resources.resourceCacheStats().estimatedBytes).toBeLessThanOrEqual(resources.resourceCacheStats().budget);
+console.log('PASS byte-budget eviction, active protection, reload and oversized-note release');

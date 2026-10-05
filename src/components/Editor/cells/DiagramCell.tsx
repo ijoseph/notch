@@ -38,6 +38,7 @@ export default function DiagramCell({
   const [isEditing, setIsEditing] = useState(!data);
   const [error, setError] = useState<string | null>(null);
   const [svg, setSvg] = useState<string>('');
+  const rootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -71,6 +72,14 @@ export default function DiagramCell({
   useEffect(() => {
     if (isFocused) setIsEditing(true);
   }, [isFocused, focusRequest]);
+
+  useEffect(() => {
+    const cell = rootRef.current?.closest('[data-cell-id]');
+    const reveal = () => setIsEditing(true);
+    cell?.addEventListener('notch-find-source', reveal);
+    return () => cell?.removeEventListener('notch-find-source', reveal);
+  }, []);
+  useEffect(() => { rootRef.current?.closest('[data-cell-id]')?.dispatchEvent(new Event('notch-editor-ready')); }, [isEditing]);
 
   const handleDoubleClick = () => {
     setIsEditing(true);
@@ -142,7 +151,7 @@ export default function DiagramCell({
 
   if (isEditing) {
     return (
-      <div>
+      <div ref={rootRef}>
         <textarea
           ref={textareaRef}
           className="cell-editor"
@@ -200,7 +209,7 @@ export default function DiagramCell({
   }
 
   return (
-    <div
+    <div ref={rootRef}
       className="diagram-preview"
       onDoubleClick={handleDoubleClick}
       onClick={onFocus}

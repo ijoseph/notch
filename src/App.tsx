@@ -11,7 +11,7 @@ import { importQuiverLibrary, scanForDuplicates, summarizeImport, type ImportPro
 import { exportNoteToMarkdown, exportNoteToHTML, exportNoteToJSON, exportLibraryToJSON, saveToFile } from './services/export';
 import { getNoteBySourceUuid, getNote, initDatabase, restoreLibrarySnapshot } from './services/database';
 import { parseLibraryBackup } from './services/backup';
-import { loadResourcesForNote } from './services/resources';
+import { loadResourcesForNote, retainResourcesForNote } from './services/resources';
 import { checkForUpdates } from './services/updater';
 import {
   createLibrary,
@@ -85,15 +85,22 @@ declare global {
   }
 }
 
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { connectNoteWindows, flushNoteWindows } from './services/noteWindows';
+import { connectNoteCommands } from './services/noteCommands';
+
 export default function App() {
   useEffect(() => {
     const disconnect = connectPreviewWindows();
+    const disconnectNotes = connectNoteWindows();
+    const disconnectCommands = connectNoteCommands();
     let exiting = false;
     const exitListener = listen('notch-request-exit', async () => {
       if (exiting) return;
       exiting = true;
       try {
         await flushPendingChanges();
+        await flushNoteWindows();
         await invoke('complete_exit');
       } catch (error) {
         exiting = false;
@@ -120,7 +127,7 @@ export default function App() {
     };
     window.addEventListener('notch-open-preview', open);
     window.addEventListener('keydown', cellsUndo, true);
-    return () => { disconnect(); void exitListener.then(fn => fn()); void navigationListener.then(fn => fn()); window.removeEventListener('notch-open-preview', open); window.removeEventListener('keydown', cellsUndo, true); };
+    return () => { disconnect(); disconnectNotes(); disconnectCommands(); void exitListener.then(fn => fn()); void navigationListener.then(fn => fn()); window.removeEventListener('notch-open-preview', open); window.removeEventListener('keydown', cellsUndo, true); };
   }, []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -149,10 +156,15 @@ export default function App() {
   const activeLibrary = libraries.find(library => library.id === activeLibraryId) ?? libraries[0];
 
   useEffect(() => {
-    void invoke('set_note_menu_state', {
-      hasNote: hasSelectedNote && !loading && !settingsOpen && !isCreateLibraryOpen && !isRenameLibraryOpen,
-      isTrashed: selectedNoteIsTrashed,
+    const updateMenu = () => getCurrentWindow().isFocused().then(focused => {
+      if (focused) return invoke('set_note_menu_state', {
+        hasNote: hasSelectedNote && !loading && !settingsOpen && !isCreateLibraryOpen && !isRenameLibraryOpen,
+        isTrashed: selectedNoteIsTrashed,
+      });
     }).catch(err => console.warn('Could not update note menu:', err));
+    void updateMenu();
+    const listener = getCurrentWindow().onFocusChanged(event => { if (event.payload) void updateMenu(); });
+    return () => { void listener.then(fn => fn()); };
   }, [hasSelectedNote, selectedNoteIsTrashed, loading, settingsOpen, isCreateLibraryOpen, isRenameLibraryOpen]);
 
   const handleCreateLibrary = useCallback(() => {
@@ -478,36 +490,43 @@ export default function App() {
           return;
         }
 
-        // Ensure embedded images are cached so exports can inline them.
-        await loadResourcesForNote(note.id);
+        // Hold images while the save dialog is open, even if selection changes.
+        const release = retainResourcesForNote(note.id);
+        try {
+          await loadResourcesForNote(note.id);
 
-        const sanitizedTitle = note.title.replace(/[^a-zA-Z0-9\s-]/g, '_').trim() || 'untitled';
-        const savePath = await save({
-          title: 'Export Note',
-          defaultPath: `${sanitizedTitle}.md`,
-          filters: [
-            { name: 'Markdown', extensions: ['md'] },
-            { name: 'HTML', extensions: ['html'] },
-            { name: 'JSON', extensions: ['json'] },
-          ],
-        });
+          const sanitizedTitle = note.title.replace(/[^a-zA-Z0-9\s-]/g, '_').trim() || 'untitled';
+          const savePath = await save({
+            title: 'Export Note',
+            defaultPath: `${sanitizedTitle}.md`,
+            filters: [
+              { name: 'Markdown', extensions: ['md'] },
+              { name: 'HTML', extensions: ['html'] },
+              { name: 'JSON', extensions: ['json'] },
+              { name: 'Plain Text', extensions: ['txt'] },
+            ],
+          });
 
-        if (savePath) {
-          const extension = savePath.split('.').pop()?.toLowerCase() || 'md';
-          let content: string;
-          switch (extension) {
-            case 'html':
-              content = exportNoteToHTML(note);
-              break;
-            case 'json':
-              content = exportNoteToJSON(note);
-              break;
-            default:
-              content = exportNoteToMarkdown(note);
+          if (savePath) {
+            const extension = savePath.split('.').pop()?.toLowerCase() || 'md';
+            let content: string;
+            switch (extension) {
+              case 'html':
+                content = exportNoteToHTML(note);
+                break;
+              case 'txt':
+                content = (await import('./services/noteFormats')).notePlainText(note);
+                break;
+              case 'json':
+                content = exportNoteToJSON(note);
+                break;
+              default:
+                content = exportNoteToMarkdown(note);
+            }
+            await saveToFile(savePath, content);
+            await message(`Exported to ${savePath.split('/').pop()}`, { title: 'Export Note' });
           }
-          await saveToFile(savePath, content);
-          await message(`Exported to ${savePath.split('/').pop()}`, { title: 'Export Note' });
-        }
+        } finally { release(); }
       },
       exportLibrary: async () => {
         const savePath = await save({

@@ -6,5 +6,5 @@ test('performance bounds preserve search, resource and preview correctness', asy
   });
   const [exitCode, stdout, stderr] = await Promise.all([run.exited, new Response(run.stdout).text(), new Response(run.stderr).text()]);
   expect({exitCode, stderr}).toEqual({exitCode:0, stderr:''});
-  expect(stdout.match(/^PASS /gm)).toHaveLength(4);
+  expect(stdout.match(/^PASS /gm)).toHaveLength(6);
 }, 30_000);

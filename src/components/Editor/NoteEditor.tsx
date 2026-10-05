@@ -12,6 +12,7 @@ import FindBar from '../Search/FindBar';
 import { copyNoteLink } from '../NoteList/NoteListItem';
 import {
   loadResourcesForNote,
+  retainResourcesForNote,
   dehydrateResourceHtml,
   createResourceFromBase64,
   bytesToBase64,
@@ -404,7 +405,9 @@ export default function NoteEditor({ showFindBar, onCloseFindBar }: NoteEditorPr
   // Load this note's image/attachment resources into the render cache.
   useEffect(() => {
     if (note?.id && note.bodyLoaded) {
-      loadResourcesForNote(note.id);
+      const release = retainResourcesForNote(note.id);
+      void loadResourcesForNote(note.id).catch(error => console.warn('Unable to load note images:', error));
+      return release;
     }
   }, [note?.id, note?.bodyLoaded]);
 

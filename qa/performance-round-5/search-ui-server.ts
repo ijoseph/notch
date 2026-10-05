@@ -2,11 +2,11 @@ const dir = import.meta.dir;
 const build = await Bun.build({entrypoints:[`${dir}/search-ui.tsx`],outdir:`${dir}/dist-search`,target:'browser',minify:true,
   define:{'process.env.NODE_ENV':'"production"'}, plugins:[{name:'synthetic-search-transport',setup(build) {
     build.onLoad({filter:/src\/services\/search\.ts$/},()=>({loader:'ts',contents:`
-      export async function searchNotes(query,options) {
+      export async function searchNoteSummaries(query,options) {
         document.getElementById('requests').textContent = query + ':' + options.offset;
         await new Promise(resolve=>setTimeout(resolve,query==='slow'?3000:10));
         const count=query==='common'?125:1;
-        return Array.from({length:count},(_,i)=>({id:String(i),title:query+' result '+String(i+1).padStart(3,'0'),notebookId:'qa',cells:[{type:'markdown',data:query+' body'}]})).slice(options.offset,options.offset+options.limit);
+        return Array.from({length:count},(_,i)=>({id:String(i),title:query+' result '+String(i+1).padStart(3,'0'),notebookId:'qa',excerpt:query+' body'})).slice(options.offset,options.offset+options.limit);
       }
     `}));
     build.onLoad({filter:/src\/store\/index\.ts$/},()=>({loader:'ts',contents:`

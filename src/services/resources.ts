@@ -32,18 +32,57 @@ function toDataUrl(base64: string, mimeType: string): string {
 
 const loadedNotes = new Set<string>();
 const loadingNotes = new Map<string, Promise<void>>();
+// Conservative UTF-16 estimate; active consumers may exceed the budget until
+// they release their leases. Evict whole notes so a reload cannot be partial.
+const CACHE_BUDGET = 64 * 1024 * 1024;
+const noteUsage = new Map<string, number>();
+const leases = new Map<symbol, string>();
+let cachedBytes = 0;
+function touch(noteId: string): void {
+  const bytes = noteUsage.get(noteId) ?? 0;
+  noteUsage.delete(noteId); noteUsage.set(noteId, bytes);
+}
+function removeNote(noteId: string): void {
+  cachedBytes -= noteUsage.get(noteId) ?? 0;
+  noteUsage.delete(noteId); loadedNotes.delete(noteId);
+  for (const [id, resource] of cache) if (resource.noteId === noteId) cache.delete(id);
+}
+function trim(protectedNote?: string): void {
+  const active = new Set(leases.values());
+  for (const noteId of noteUsage.keys()) {
+    if (cachedBytes <= CACHE_BUDGET && noteUsage.size <= 256) break;
+    if (noteId !== protectedNote && !active.has(noteId) && !loadingNotes.has(noteId)) removeNote(noteId);
+  }
+}
+function cacheResource(id: string, resource: CachedResource): void {
+  const prior = cache.get(id);
+  const delta = (resource.dataUrl.length - (prior?.dataUrl.length ?? 0)) * 2;
+  cache.set(id, resource);
+  cachedBytes += delta;
+  noteUsage.set(resource.noteId, (noteUsage.get(resource.noteId) ?? 0) + delta);
+  touch(resource.noteId);
+}
+export function retainResourcesForNote(noteId: string): () => void {
+  const lease = Symbol(noteId); leases.set(lease, noteId); touch(noteId);
+  return () => { leases.delete(lease); trim(); };
+}
+export function resourceCacheStats() {
+  return { estimatedBytes: cachedBytes, budget: CACHE_BUDGET, notes: noteUsage.size, resources: cache.size };
+}
+
 onResourcesInvalidated((noteId, remove) => {
-  if (noteId === undefined) { cache.clear(); loadedNotes.clear(); loadingNotes.clear(); }
+  if (noteId === undefined) { cache.clear(); loadedNotes.clear(); loadingNotes.clear(); noteUsage.clear(); cachedBytes = 0; }
   else {
     loadedNotes.delete(noteId); loadingNotes.delete(noteId);
     // Resource creation is append-only: existing cached images remain valid.
-    if (remove) for (const [id, resource] of cache) if (resource.noteId === noteId) cache.delete(id);
+    if (remove) removeNote(noteId);
   }
   bump();
 });
 
 /** Share concurrent reads, including empty notes; writes invalidate this state. */
 export function loadResourcesForNote(noteId: string): Promise<void> {
+  touch(noteId);
   if (loadedNotes.has(noteId)) return Promise.resolve();
   const pending = loadingNotes.get(noteId);
   if (pending) return pending;
@@ -55,7 +94,7 @@ export function loadResourcesForNote(noteId: string): Promise<void> {
     let changed = false;
     for (const resource of resources) {
       if (!cache.has(resource.id)) {
-        cache.set(resource.id, {
+        cacheResource(resource.id, {
           noteId,
           dataUrl: toDataUrl(resource.data, resource.mimeType ?? ''),
           mimeType: resource.mimeType ?? '',
@@ -65,6 +104,7 @@ export function loadResourcesForNote(noteId: string): Promise<void> {
       }
     }
     loadedNotes.add(noteId);
+    trim(noteId);
     if (changed) bump();
   })();
   loadingNotes.set(noteId, work);
@@ -77,7 +117,9 @@ export function loadResourcesForNote(noteId: string): Promise<void> {
 export function getResourceVersion(): number { return version; }
 
 export function getResourceDataUrl(id: string): string | undefined {
-  return cache.get(id)?.dataUrl;
+  const resource = cache.get(id);
+  if (resource) touch(resource.noteId);
+  return resource?.dataUrl;
 }
 
 /** Resolve a single href/src: `notch-resource://<id>` -> data URL, else unchanged. */
@@ -97,7 +139,8 @@ export async function createResourceFromBase64(
   base64: string
 ): Promise<string> {
   const resource = await db.createResource(noteId, filename, mimeType, base64);
-  cache.set(resource.id, { noteId, dataUrl: toDataUrl(base64, mimeType), mimeType, filename });
+  cacheResource(resource.id, { noteId, dataUrl: toDataUrl(base64, mimeType), mimeType, filename });
+  trim(noteId);
   bump();
   return resource.id;
 }

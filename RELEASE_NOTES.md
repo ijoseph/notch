@@ -1,4 +1,4 @@
-# Notch 0.4.0
+# Notch 0.3.2
 
 This release adds more Quiver-style editing and viewing workflows, improves search responsiveness for large notes, and fixes navigation and preview polish.
 

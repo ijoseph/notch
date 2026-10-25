@@ -3,8 +3,9 @@ import { loader } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import { APP_SHORTCUTS_CONTEXT, installKeybindingRules, loadKeyBinding } from './monaco';
 import { useCodePreferences, useResolvedCodeTheme, type CodePreferences } from '../../../store/codePreferences';
-import { APPLY_EDIT_EVENT, READ_SELECTION_EVENT, type CellEdit, type ReadSelectionDetail } from './editorBridge';
+import { APPLY_EDIT_EVENT, READ_SELECTION_EVENT, applyCellEdit, readCellSelection, type CellEdit, type ReadSelectionDetail } from './editorBridge';
 import { cellKeyIntent, clampOffset, estimateEditorHeight, minimalReplacement, type CellKeyIntent } from '../textEdits';
+import { prepareFileEdit } from '../fileInsertion';
 
 export type MonacoNamespace = typeof Monaco;
 export type MonacoEditor = Monaco.editor.IStandaloneCodeEditor;
@@ -404,35 +405,19 @@ export default function MonacoCellEditor({
       const insertion = latest.current.fileInsertion;
       return insertion ? files.filter(insertion.accepts) : [];
     };
-    const insertAtCaret = (text: string): boolean => {
-      const editor = editorRef.current;
-      const model = editor?.getModel();
-      const selection = editor?.getSelection();
-      if (editor && model && selection) {
-        const start = model.getOffsetAt(selection.getStartPosition());
-        const end = model.getOffsetAt(selection.getEndPosition());
-        const caret = start + text.length;
-        return applyEditorEdit(editor, { start, end, text, selection: { start: caret, end: caret } }, 'notch-file');
-      }
-      const input = pendingInputRef.current;
-      if (!input?.isConnected) return false;
-      const { selectionStart: start, selectionEnd: end, value } = input;
-      // insertText keeps native undo, but only works in the focused textarea.
-      if (document.activeElement === input && document.execCommand('insertText', false, text)) return true;
-      latest.current.onChange(value.slice(0, start) + text + value.slice(end));
-      return true;
-    };
     const insertFiles = async (files: File[]) => {
-      let detachedData: string | null = null;
-      for (const file of files) {
-        const insertion = latest.current.fileInsertion;
-        if (!insertion) return;
-        const text = await insertion.text(file);
-        if (!unmounted && insertAtCaret(text)) continue;
-        // The editor went away while the file was stored; keep the insert.
-        detachedData = (detachedData ?? latest.current.data) + text;
-        latest.current.onChange(detachedData);
-      }
+      const insertion = latest.current.fileInsertion;
+      const selected = readCellSelection(wrapper);
+      if (!insertion || !selected) return;
+      // Keep the paste/drop position before resource storage yields. Moving
+      // the cursor while files are saved must not move the insertion, and a
+      // multi-file paste should be one undo step in the original file order.
+      const edit = await prepareFileEdit(files, selected, file => insertion.text(file));
+      if (!unmounted && applyCellEdit(wrapper, edit)) return;
+      // The editor went away while the files were stored; keep the insert.
+      const value = latest.current.data;
+      const { start, end, text } = edit;
+      latest.current.onChange(value.slice(0, start) + text + value.slice(end));
     };
     const run = (files: File[]) => {
       void insertFiles(files).catch(error => console.error('Unable to insert file', error));
